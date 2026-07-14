@@ -31,7 +31,7 @@ const ROLE_CODES = {
   swordmaster: "SM",
   mercenary: "MC",
   sorceress: ["Sorce", "FU"],
-  acrobat: "Arc",
+  acrobat: "Acro",
   flexible: "DPS",
 };
 
