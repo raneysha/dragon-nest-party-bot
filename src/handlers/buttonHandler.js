@@ -21,7 +21,7 @@ const {
 } = require("./partyManager");
 const { buildPartyEmbed, buildPartyButtons, getSlotCode } = require("./uiBuilders");
 const { hasSubclasses, getSubclasses } = require("./roleClasses");
-const { createLoot, getLoot, markSold, markPaid } = require("./lootManager");
+const { createLoot, getLoot, markSold, markPaid, markStamp, setLootHolder } = require("./lootManager");
 
 // Refreshes the live party embed/buttons on the original party message.
 // Needed when the update comes from an ephemeral message (the subclass
@@ -73,13 +73,37 @@ function buildLootRoster(party) {
         userId: member.userId,
         subclass: member.subclass,
         paid: false,
+        stamp: null,
       });
     });
   }
   if (!isMember(party, party.leaderId)) {
-    roster.push({ code: "👑", userId: party.leaderId, subclass: null, paid: false });
+    roster.push({ code: "👑", userId: party.leaderId, subclass: null, paid: false, stamp: null });
   }
   return roster;
+}
+
+// Parses a free-typed price like "500k", "1.2m", "750rb" into a plain
+// gold number. Accepts k/rb/ribu for thousands and m/jt/juta for
+// millions (matching the placeholder shown on the harga input); a bare
+// number with no suffix is taken as-is. Returns null if it can't be
+// parsed, so unparseable entries can be excluded from the total instead
+// of silently corrupting it.
+function parseGoldAmount(raw) {
+  if (!raw) return null;
+  const str = raw.toString().trim().toLowerCase().replace(/\s+/g, "").replace(/,/g, ".");
+  const match = str.match(/^(\d+(?:\.\d+)?)(k|rb|ribu|m|jt|juta)?$/);
+  if (!match) return null;
+  const num = parseFloat(match[1]);
+  if (Number.isNaN(num)) return null;
+  const suffix = match[2];
+  if (suffix === "k" || suffix === "rb" || suffix === "ribu") return num * 1_000;
+  if (suffix === "m" || suffix === "jt" || suffix === "juta") return num * 1_000_000;
+  return num;
+}
+
+function formatGold(num) {
+  return new Intl.NumberFormat("id-ID").format(Math.round(num));
 }
 
 // Builds the loot recap embed from a lootManager record. Sold items get
@@ -100,20 +124,86 @@ function buildLootRecapEmbed(record) {
         .join("\n")
     : "_none_";
 
+  // Total is summed only from sold items with a parseable price. If some
+  // sold item's price couldn't be parsed (free-text weirdness), the total
+  // is flagged as approximate rather than silently dropping it.
+  const soldPrices = record.items.filter((item) => item.sold && item.price).map((item) => parseGoldAmount(item.price));
+  const parsedPrices = soldPrices.filter((p) => p !== null);
+  const totalGold = parsedPrices.reduce((sum, p) => sum + p, 0);
+  const hasUnparsedPrice = parsedPrices.length !== soldPrices.length;
+  const totalLine =
+    parsedPrices.length > 0
+      ? `\n**Total gold:** ${formatGold(totalGold)}${hasUnparsedPrice ? " (approx — ada harga yang tidak terbaca)" : ""}`
+      : "";
+
   embed.setDescription(
-    `**Tanggal clear:** ${record.dateCleared}\n**Bawa loot:** ${record.lootHolder}\n**Loot:**\n${lootLines}`
+    `**Tanggal clear:** ${record.dateCleared}\n**Bawa loot:** <@${record.lootHolder}>\n**Loot:**\n${lootLines}${totalLine}`
   );
 
   if (record.roster && record.roster.length > 0) {
     const maxCodeLength = Math.max(...record.roster.map((e) => e.code.length));
     const rosterLines = record.roster.map((e) => {
       const value = e.subclass ? `${e.subclass} <@${e.userId}>` : `<@${e.userId}>`;
-      return `${e.code.padEnd(maxCodeLength)} : ${value}${e.paid ? " ✅" : ""}`;
+      const stampText = e.stamp != null ? ` — 🎟️ ${e.stamp}` : "";
+      return `${e.code.padEnd(maxCodeLength)} : ${value}${e.paid ? " ✅" : ""}${stampText}`;
     });
-    embed.addFields({ name: "\u200b", value: rosterLines.join("\n"), inline: false });
+    const totalStamp = record.roster.reduce((sum, e) => sum + (e.stamp || 0), 0);
+    const totalGoldStamp = totalStamp * 3;
+    const totalGaji = (totalGold - totalGoldStamp) / record.roster.length;
+    rosterLines.push(
+      "",
+      `**Total Gold Stamp:** ${formatGold(totalGoldStamp)}`,
+      `**Total Gaji:** ${formatGold(totalGaji)}`
+    );
+    embed.addFields({ name: "🎟️ STAMP", value: rosterLines.join("\n"), inline: false });
   }
 
   return embed;
+}
+
+
+// The "Bawa loot" field is now the loot holder's real Discord user ID
+// (picked from a dropdown of party members), so this is an exact match —
+// no more fuzzy username/nickname guessing.
+function isLootHolder(interaction, record) {
+  return interaction.user.id === record.lootHolder;
+}
+
+// Whether every loot item has been marked sold. Also true if there are no
+// items at all — nothing to sell means the Gaji button should be usable
+// right away.
+function allItemsSold(record) {
+  return record.items.every((item) => item.sold);
+}
+
+// Builds the SOLD/GAJI button row for the loot recap message. GAJI stays
+// disabled until every item is marked sold.
+function buildLootButtons(recapMessageId, record) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`party:soldbtn:${recapMessageId}`)
+        .setLabel("SOLD")
+        .setEmoji("💰")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`party:gajibtn:${recapMessageId}`)
+        .setLabel("GAJI")
+        .setEmoji("💵")
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(!allItemsSold(record)),
+      new ButtonBuilder()
+        .setCustomId(`party:stampbtn:${recapMessageId}`)
+        .setLabel("STAMP")
+        .setEmoji("🎟️")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`party:changeholderbtn:${recapMessageId}`)
+        .setLabel("Ubah Pembawa Loot")
+        .setEmoji("👑")
+        .setStyle(ButtonStyle.Secondary)
+    ),
+  ];
 }
 
 async function handleButton(interaction) {
@@ -129,6 +219,14 @@ async function handleButton(interaction) {
         flags: MessageFlags.Ephemeral,
       });
     }
+
+    if (!isLootHolder(interaction, record)) {
+      return interaction.reply({
+        content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa menandai item terjual.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
     const unsoldOptions = record.items
       .map((item, i) => ({ label: item.name.slice(0, 100), value: String(i), sold: item.sold }))
       .filter((opt) => !opt.sold);
@@ -158,6 +256,20 @@ async function handleButton(interaction) {
     if (!record) {
       return interaction.reply({
         content: "Data party ini sudah tidak tersedia.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (!isLootHolder(interaction, record)) {
+      return interaction.reply({
+        content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa menandai gaji.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (!allItemsSold(record)) {
+      return interaction.reply({
+        content: "Semua item harus terjual dulu sebelum gaji bisa ditandai.",
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -192,6 +304,105 @@ async function handleButton(interaction) {
 
     return interaction.reply({
       content: "Member mana yang sudah menerima gaji?",
+      components: [new ActionRowBuilder().addComponents(menu)],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  if (action === "stampbtn") {
+    const recapMessageId = parts[2];
+    const record = getLoot(recapMessageId);
+    if (!record) {
+      return interaction.reply({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (!isLootHolder(interaction, record)) {
+      return interaction.reply({
+        content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa mengisi STAMP.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (!record.roster || record.roster.length === 0) {
+      return interaction.reply({
+        content: "Tidak ada member di roster party ini.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    const options = [];
+    for (let i = 0; i < record.roster.length; i++) {
+      const entry = record.roster[i];
+      let username = entry.userId;
+      try {
+        const user = await interaction.client.users.fetch(entry.userId);
+        username = user.username;
+      } catch (err) {
+        // If the fetch fails for some reason, fall back to showing the raw ID.
+      }
+      const label = entry.stamp != null ? `${username} (🎟️ ${entry.stamp})` : username;
+      options.push({ label: label.slice(0, 100), value: String(i) });
+    }
+
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`party:stampselect:${recapMessageId}`)
+      .setPlaceholder("Pilih member")
+      .addOptions(options.slice(0, 25)); // Discord select menus cap at 25 options
+
+    return interaction.reply({
+      content: "Isi STAMP untuk member mana?",
+      components: [new ActionRowBuilder().addComponents(menu)],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  if (action === "changeholderbtn") {
+    const recapMessageId = parts[2];
+    const record = getLoot(recapMessageId);
+    if (!record) {
+      return interaction.reply({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (interaction.user.id !== record.leaderId) {
+      return interaction.reply({
+        content: "Hanya party leader yang bisa mengubah pembawa loot.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    const options = [];
+    for (const entry of record.roster) {
+      let username = entry.userId;
+      try {
+        const user = await interaction.client.users.fetch(entry.userId);
+        username = user.username;
+      } catch (err) {
+        // If the fetch fails for some reason, fall back to showing the raw ID.
+      }
+      const label = entry.userId === record.lootHolder ? `⭐ ${username} (saat ini)` : username;
+      options.push({ label: label.slice(0, 100), value: entry.userId });
+    }
+
+    if (options.length === 0) {
+      return interaction.reply({
+        content: "Tidak ada member di roster party ini.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`party:changeholderselect:${recapMessageId}`)
+      .setPlaceholder("Pilih pembawa loot baru")
+      .addOptions(options.slice(0, 25)); // Discord select menus cap at 25 options
+
+    return interaction.reply({
+      content: "Siapa pembawa loot yang baru?",
       components: [new ActionRowBuilder().addComponents(menu)],
       flags: MessageFlags.Ephemeral,
     });
@@ -287,40 +498,35 @@ async function handleButton(interaction) {
       });
     }
 
-    const modal = new ModalBuilder()
-      .setCustomId(`party:finishmodal:${party.messageId}`)
-      .setTitle("Finish party");
+    // Loot holder is picked from the actual party roster (leader included,
+    // even if they didn't fill a role) instead of typed as free text — this
+    // is what makes the "Hanya <holder>" checks on SOLD/GAJI reliable.
+    const memberIds = new Set(getAllMemberIds(party));
+    memberIds.add(party.leaderId);
 
-    const lootHolderInput = new TextInputBuilder()
-      .setCustomId("loot_holder")
-      .setLabel("Siapa yang bawa loot?")
-      .setStyle(TextInputStyle.Short)
-      .setMaxLength(100)
-      .setRequired(true);
+    const options = [];
+    for (const id of memberIds) {
+      let username = id;
+      try {
+        const user = await interaction.client.users.fetch(id);
+        username = user.username;
+      } catch (err) {
+        // If the fetch fails for some reason, fall back to showing the raw ID.
+      }
+      const label = id === party.leaderId ? `👑 ${username}` : username;
+      options.push({ label: label.slice(0, 100), value: id });
+    }
 
-    const lootListInput = new TextInputBuilder()
-      .setCustomId("loot_list")
-      .setLabel("Lootnya apa aja?")
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder("Satu item per baris")
-      .setMaxLength(500)
-      .setRequired(true);
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`party:finishholder:${party.messageId}`)
+      .setPlaceholder("Siapa yang bawa loot?")
+      .addOptions(options.slice(0, 25)); // Discord select menus cap at 25 options
 
-    const dateInput = new TextInputBuilder()
-      .setCustomId("date_cleared")
-      .setLabel("Tanggal clear")
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder("e.g. 10/07/2026")
-      .setMaxLength(30)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(lootHolderInput),
-      new ActionRowBuilder().addComponents(lootListInput),
-      new ActionRowBuilder().addComponents(dateInput)
-    );
-
-    return interaction.showModal(modal);
+    return interaction.reply({
+      content: "Siapa yang bawa loot dari party ini?",
+      components: [new ActionRowBuilder().addComponents(menu)],
+      flags: MessageFlags.Ephemeral,
+    });
   }
 
   if (action === "join") {
@@ -411,6 +617,13 @@ async function handleSelectMenu(interaction) {
       });
     }
 
+    if (!isLootHolder(interaction, record)) {
+      return interaction.update({
+        content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa menandai item terjual.`,
+        components: [],
+      });
+    }
+
     const modal = new ModalBuilder()
       .setCustomId(`party:soldprice:${recapMessageId}:${index}`)
       .setTitle("Harga jual");
@@ -431,6 +644,21 @@ async function handleSelectMenu(interaction) {
     const [, , recapMessageId] = parts;
     const index = Number(interaction.values[0]);
 
+    const existingRecord = getLoot(recapMessageId);
+    if (!existingRecord) {
+      return interaction.update({
+        content: "Data party ini sudah tidak tersedia.",
+        components: [],
+      });
+    }
+
+    if (!isLootHolder(interaction, existingRecord)) {
+      return interaction.update({
+        content: `Hanya **<@${existingRecord.lootHolder}>** (pembawa loot) yang bisa menandai gaji.`,
+        components: [],
+      });
+    }
+
     const record = markPaid(recapMessageId, index);
     if (!record) {
       return interaction.update({
@@ -450,6 +678,137 @@ async function handleSelectMenu(interaction) {
       content: `✅ Gaji diberikan ke <@${record.roster[index].userId}>`,
       components: [],
     });
+  }
+
+  if (action === "stampselect") {
+    const [, , recapMessageId] = parts;
+    const index = interaction.values[0];
+
+    const record = getLoot(recapMessageId);
+    if (!record) {
+      return interaction.update({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        components: [],
+      });
+    }
+
+    if (!isLootHolder(interaction, record)) {
+      return interaction.update({
+        content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa mengisi STAMP.`,
+        components: [],
+      });
+    }
+
+    const entry = record.roster[index];
+    let username = entry.userId;
+    try {
+      const user = await interaction.client.users.fetch(entry.userId);
+      username = user.username;
+    } catch (err) {
+      // Fall back to the raw ID if the fetch fails.
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(`party:stampmodal:${recapMessageId}:${index}`)
+      .setTitle("Isi STAMP");
+
+    const stampInput = new TextInputBuilder()
+      .setCustomId("stamp")
+      .setLabel(`Jumlah STAMP untuk ${username}`.slice(0, 45))
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder("misal 5")
+      .setValue(entry.stamp != null ? String(entry.stamp) : "")
+      .setMaxLength(10)
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(stampInput));
+    return interaction.showModal(modal);
+  }
+
+  if (action === "changeholderselect") {
+    const [, , recapMessageId] = parts;
+    const newHolderId = interaction.values[0];
+
+    const existingRecord = getLoot(recapMessageId);
+    if (!existingRecord) {
+      return interaction.update({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        components: [],
+      });
+    }
+
+    if (interaction.user.id !== existingRecord.leaderId) {
+      return interaction.update({
+        content: "Hanya party leader yang bisa mengubah pembawa loot.",
+        components: [],
+      });
+    }
+
+    const record = setLootHolder(recapMessageId, newHolderId);
+    if (!record) {
+      return interaction.update({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        components: [],
+      });
+    }
+
+    try {
+      const recapMessage = await interaction.channel.messages.fetch(recapMessageId);
+      await recapMessage.edit({
+        embeds: [buildLootRecapEmbed(record)],
+        components: buildLootButtons(recapMessageId, record),
+      });
+    } catch (err) {
+      // Recap message may have been deleted — not fatal, the change is still recorded.
+    }
+
+    return interaction.update({
+      content: `✅ Pembawa loot diubah ke <@${newHolderId}>.`,
+      components: [],
+    });
+  }
+
+  if (action === "finishholder") {
+    const [, , messageId] = parts;
+    const lootHolderId = interaction.values[0];
+
+    const party = getParty(messageId);
+    if (!party) {
+      return interaction.update({ content: "This party no longer exists.", components: [] });
+    }
+    if (interaction.user.id !== party.leaderId) {
+      return interaction.update({
+        content: "Only the party leader can finish this party.",
+        components: [],
+      });
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(`party:finishmodal:${messageId}:${lootHolderId}`)
+      .setTitle("Finish party");
+
+    const lootListInput = new TextInputBuilder()
+      .setCustomId("loot_list")
+      .setLabel("Lootnya apa aja?")
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder("Satu item per baris")
+      .setMaxLength(500)
+      .setRequired(true);
+
+    const dateInput = new TextInputBuilder()
+      .setCustomId("date_cleared")
+      .setLabel("Tanggal clear")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder("e.g. 10/07/2026")
+      .setMaxLength(30)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(lootListInput),
+      new ActionRowBuilder().addComponents(dateInput)
+    );
+
+    return interaction.showModal(modal);
   }
 
   if (action !== "pickclass") return;
@@ -495,7 +854,74 @@ async function handleModalSubmit(interaction) {
     const index = Number(indexStr);
     const harga = interaction.fields.getTextInputValue("harga").trim();
 
+    const existingRecord = getLoot(recapMessageId);
+    if (!existingRecord) {
+      return interaction.reply({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (!isLootHolder(interaction, existingRecord)) {
+      return interaction.reply({
+        content: `Hanya **<@${existingRecord.lootHolder}>** (pembawa loot) yang bisa menandai item terjual.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
     const record = markSold(recapMessageId, index, interaction.user.id, harga);
+    if (!record) {
+      return interaction.reply({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    try {
+      const recapMessage = await interaction.channel.messages.fetch(recapMessageId);
+      await recapMessage.edit({
+        embeds: [buildLootRecapEmbed(record)],
+        components: buildLootButtons(recapMessageId, record),
+      });
+    } catch (err) {
+      // Recap message may have been deleted — not fatal, the sale is still recorded.
+    }
+
+    return interaction.reply({
+      content: `✅ Ditandai terjual: **${record.items[index].name}** — ${harga}`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  if (action === "stampmodal") {
+    const [, , recapMessageId, indexStr] = parts;
+    const index = Number(indexStr);
+    const stampRaw = interaction.fields.getTextInputValue("stamp").trim();
+    const stampValue = Number(stampRaw);
+
+    if (!Number.isFinite(stampValue)) {
+      return interaction.reply({
+        content: `"${stampRaw}" bukan angka yang valid. Coba lagi dengan angka saja, misal 5.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    const existingRecord = getLoot(recapMessageId);
+    if (!existingRecord) {
+      return interaction.reply({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (!isLootHolder(interaction, existingRecord)) {
+      return interaction.reply({
+        content: `Hanya **<@${existingRecord.lootHolder}>** (pembawa loot) yang bisa mengisi STAMP.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    const record = markStamp(recapMessageId, index, stampValue);
     if (!record) {
       return interaction.reply({
         content: "Data loot untuk party ini sudah tidak tersedia.",
@@ -507,11 +933,11 @@ async function handleModalSubmit(interaction) {
       const recapMessage = await interaction.channel.messages.fetch(recapMessageId);
       await recapMessage.edit({ embeds: [buildLootRecapEmbed(record)] });
     } catch (err) {
-      // Recap message may have been deleted — not fatal, the sale is still recorded.
+      // Recap message may have been deleted — not fatal, the stamp is still recorded.
     }
 
     return interaction.reply({
-      content: `✅ Ditandai terjual: **${record.items[index].name}** — ${harga}`,
+      content: `🎟️ STAMP untuk <@${record.roster[index].userId}> diset ke **${stampValue}**.`,
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -550,7 +976,7 @@ async function handleModalSubmit(interaction) {
 // (plus the leader) added to it.
 // customId format: party:finishmodal:<messageId>
 async function handleFinishModalSubmit(interaction) {
-  const [, , messageId] = interaction.customId.split(":");
+  const [, , messageId, lootHolderId] = interaction.customId.split(":");
   const party = getParty(messageId);
 
   if (!party) {
@@ -567,9 +993,20 @@ async function handleFinishModalSubmit(interaction) {
     });
   }
 
-  const lootHolder = interaction.fields.getTextInputValue("loot_holder");
   const lootList = interaction.fields.getTextInputValue("loot_list");
   const dateCleared = interaction.fields.getTextInputValue("date_cleared");
+
+  // Thread names can't contain a live mention, so fetch a plain username
+  // for the loot holder just for that — the loot record itself keeps the
+  // real user ID (lootHolderId) for permission checks and the @mention
+  // shown in the recap embed.
+  let lootHolderName = lootHolderId;
+  try {
+    const user = await interaction.client.users.fetch(lootHolderId);
+    lootHolderName = user.username;
+  } catch (err) {
+    // Fall back to the raw ID for the thread name if the fetch fails.
+  }
 
   // Everyone who joined a role, plus the leader (who may not have joined
   // a role themselves), gets added to the loot thread.
@@ -588,7 +1025,7 @@ async function handleFinishModalSubmit(interaction) {
     // Message may already be gone — not fatal, keep going.
   }
 
-  const threadName = buildFinishThreadName(party.activity, dateCleared, lootHolder);
+  const threadName = buildFinishThreadName(party.activity, dateCleared, lootHolderName);
   const mentions = Array.from(memberIds).map((id) => `<@${id}>`).join(" ");
 
   // One loot item per line, blank lines dropped — this becomes the list
@@ -602,7 +1039,8 @@ async function handleFinishModalSubmit(interaction) {
   const lootRecord = {
     activity: party.activity,
     dateCleared,
-    lootHolder,
+    lootHolder: lootHolderId,
+    leaderId: party.leaderId,
     roster: buildLootRoster(party),
     items: lootItems,
   };
@@ -675,19 +1113,7 @@ async function handleFinishModalSubmit(interaction) {
   // Now that we know the recap message's ID, register the loot record
   // under it and attach the Sold button (its customId needs that ID).
   createLoot(recapMessage.id, lootRecord);
-  const soldRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`party:soldbtn:${recapMessage.id}`)
-      .setLabel("SOLD")
-      .setEmoji("💰")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`party:gajibtn:${recapMessage.id}`)
-      .setLabel("GAJI")
-      .setEmoji("💵")
-      .setStyle(ButtonStyle.Primary)
-  );
-  await recapMessage.edit({ components: [soldRow] });
+  await recapMessage.edit({ components: buildLootButtons(recapMessage.id, lootRecord) });
 
   return interaction.editReply({
     content: `✅ Party finished! Loot thread created: ${thread}`,

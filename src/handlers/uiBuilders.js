@@ -13,32 +13,21 @@ function roleEmoji(roleKey) {
   return ROLE_LABELS[roleKey].split(" ")[0];
 }
 
-// Same idea but returns everything after the emoji — the plain role name
-// used in each member line (e.g. "Paladin", "Flexible (DPS)").
-function roleNamePlain(roleKey) {
-  return ROLE_LABELS[roleKey].split(" ").slice(1).join(" ");
-}
-
-// Short codes used in the roster list. Roles with a plain string code get
-// numbered only when more than one slot is open (PL, then PL1/PL2/...).
-// Sorceress uses two fixed, non-numbered codes (EL, FU) since its two
-// slots aren't interchangeable — SOR3/SOR4 is a fallback if a party ever
-// asks for more than 2. Flexible always numbers its slots (DPS1, DPS2...)
-// since those slots are naturally interchangeable and can be many.
+// Short codes used in the roster list. Roles get numbered only when more
+// than one slot is open (PL, then PL1/PL2/...). Flexible always numbers
+// its slots (DPS1, DPS2...) since those are naturally interchangeable and
+// can be many.
 const ROLE_CODES = {
   tank: "PL",
   healer: "PR",
   swordmaster: "SM",
   mercenary: "MC",
-  sorceress: ["Sorce", "FU"],
-  acrobat: "Acro",
+  sorceress: "Sorce",
+  acrobat: "Arc",
   flexible: "DPS",
 };
 
 function getSlotCode(roleKey, index, cap) {
-  if (roleKey === "sorceress") {
-    return ROLE_CODES.sorceress[index] || `SOR${index + 1}`;
-  }
   if (roleKey === "flexible") {
     return `${ROLE_CODES.flexible}${index + 1}`;
   }
@@ -47,10 +36,8 @@ function getSlotCode(roleKey, index, cap) {
 }
 
 // The label shown on the join button itself — one button covers the whole
-// role (not a single slot). Sorceress shows "Sorce" rather than its two
-// slot codes (EL/FU), since those are roster-line codes, not a button name.
+// role (not a single slot).
 function getRoleButtonCode(roleKey) {
-  if (roleKey === "sorceress") return "Sorce";
   return ROLE_CODES[roleKey] || roleKey.toUpperCase();
 }
 
@@ -89,7 +76,7 @@ function buildPartyEmbed(party) {
   }
   const maxCodeLength = Math.max(...rosterEntries.map((e) => e.code.length));
   const rosterLines = rosterEntries.map(
-    (e) => `${e.code.padEnd(maxCodeLength)} : ${e.value}`
+    (e) => `\`${e.code.padEnd(maxCodeLength)}\` : ${e.value}`
   );
   embed.addFields({
     name: "\u200b",

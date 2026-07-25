@@ -15,18 +15,6 @@ const ROLE_LABELS = {
   flexible: "🔀 Flexible (DPS)",
 };
 
-// Short labels for button text — buttons have limited horizontal space,
-// especially with 5 roles in one row.
-const ROLE_BUTTON_LABELS = {
-  tank: "Paladin",
-  healer: "Healers",
-  swordmaster: "SM",
-  mercenary: "Merc",
-  sorceress: "Sorc",
-  acrobat: "Acro",
-  flexible: "Flex",
-};
-
 function createParty({ messageId, channelId, leaderId, activity, time, note, nestType, roleCaps }) {
   const roles = {};
   for (const [key, cap] of Object.entries(roleCaps)) {
@@ -129,7 +117,6 @@ function getAllMemberIds(party) {
 
 module.exports = {
   ROLE_LABELS,
-  ROLE_BUTTON_LABELS,
   createParty,
   getParty,
   getAllParties,
