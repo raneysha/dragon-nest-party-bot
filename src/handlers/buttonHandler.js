@@ -9,6 +9,7 @@ const {
   EmbedBuilder,
   ButtonBuilder,
   ButtonStyle,
+  PermissionFlagsBits,
 } = require("discord.js");
 const {
   getParty,
@@ -22,6 +23,14 @@ const {
 const { buildPartyEmbed, buildPartyButtons, getSlotCode } = require("./uiBuilders");
 const { hasSubclasses, getSubclasses } = require("./roleClasses");
 const { createLoot, getLoot, markSold, markPaid, markStamp, setLootHolder } = require("./lootManager");
+
+// Finish and Disband can be used by the party leader OR anyone with server
+// Administrator permission (mods stepping in for an absent/AFK leader).
+// Other leader-gated actions (Kick, loot selling, etc.) stay leader-only.
+function isLeaderOrAdmin(interaction, party) {
+  if (interaction.user.id === party.leaderId) return true;
+  return interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) ?? false;
+}
 
 // Refreshes the live party embed/buttons on the original party message.
 // Needed when the update comes from an ephemeral message (the subclass
@@ -408,6 +417,47 @@ async function handleButton(interaction) {
     });
   }
 
+  if (action === "finishconfirm") {
+    const choice = parts[2]; // "yes" or "no"
+    const messageId = parts[3];
+    const party = getParty(messageId);
+
+    if (!party) {
+      return interaction.update({
+        content: "This party listing is already gone.",
+        components: [],
+      });
+    }
+
+    if (!isLeaderOrAdmin(interaction, party)) {
+      return interaction.reply({
+        content: "Only the party leader or a server admin can decide this.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (choice === "no") {
+      return interaction.update({
+        content: "👍 Party listing stays open — feel free to keep organizing it.",
+        components: [],
+      });
+    }
+
+    deleteParty(messageId);
+    try {
+      const oldChannel = await interaction.client.channels.fetch(party.channelId);
+      const oldMessage = await oldChannel.messages.fetch(party.messageId);
+      await oldMessage.delete();
+    } catch (err) {
+      // Message may already be gone — not fatal.
+    }
+
+    return interaction.update({
+      content: "💥 Party listing disbanded.",
+      components: [],
+    });
+  }
+
   const roleKey = parts[2];
   const party = getParty(interaction.message.id);
 
@@ -491,9 +541,9 @@ async function handleButton(interaction) {
   }
 
   if (action === "finish") {
-    if (interaction.user.id !== party.leaderId) {
+    if (!isLeaderOrAdmin(interaction, party)) {
       return interaction.reply({
-        content: "Only the party leader can finish this party.",
+        content: "Only the party leader or a server admin can finish this party.",
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -549,9 +599,9 @@ async function handleButton(interaction) {
       });
     }
   } else if (action === "disband") {
-    if (interaction.user.id !== party.leaderId) {
+    if (!isLeaderOrAdmin(interaction, party)) {
       return interaction.reply({
-        content: "Only the party leader can disband this party.",
+        content: "Only the party leader or a server admin can disband this party.",
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -776,9 +826,9 @@ async function handleSelectMenu(interaction) {
     if (!party) {
       return interaction.update({ content: "This party no longer exists.", components: [] });
     }
-    if (interaction.user.id !== party.leaderId) {
+    if (!isLeaderOrAdmin(interaction, party)) {
       return interaction.update({
-        content: "Only the party leader can finish this party.",
+        content: "Only the party leader or a server admin can finish this party.",
         components: [],
       });
     }
@@ -986,9 +1036,9 @@ async function handleFinishModalSubmit(interaction) {
     });
   }
 
-  if (interaction.user.id !== party.leaderId) {
+  if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "Only the party leader can finish this party.",
+      content: "Only the party leader or a server admin can finish this party.",
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -1014,16 +1064,6 @@ async function handleFinishModalSubmit(interaction) {
   memberIds.add(party.leaderId);
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  // Party is done — clear it from memory and remove its message first.
-  deleteParty(messageId);
-  try {
-    const oldChannel = await interaction.client.channels.fetch(party.channelId);
-    const oldMessage = await oldChannel.messages.fetch(party.messageId);
-    await oldMessage.delete();
-  } catch (err) {
-    // Message may already be gone — not fatal, keep going.
-  }
 
   const threadName = buildFinishThreadName(party.activity, dateCleared, lootHolderName);
   const mentions = Array.from(memberIds).map((id) => `<@${id}>`).join(" ");
@@ -1115,8 +1155,22 @@ async function handleFinishModalSubmit(interaction) {
   createLoot(recapMessage.id, lootRecord);
   await recapMessage.edit({ components: buildLootButtons(recapMessage.id, lootRecord) });
 
+  const confirmRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`party:finishconfirm:yes:${messageId}`)
+      .setLabel("Yes, disband")
+      .setEmoji("💥")
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`party:finishconfirm:no:${messageId}`)
+      .setLabel("No, keep it open")
+      .setEmoji("🔁")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
   return interaction.editReply({
-    content: `✅ Party finished! Loot thread created: ${thread}`,
+    content: `✅ Loot thread created: ${thread}\n\nDo you also want to disband this party listing?`,
+    components: [confirmRow],
   });
 }
 
