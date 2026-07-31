@@ -22,7 +22,8 @@ const {
 } = require("./partyManager");
 const { buildPartyEmbed, buildPartyButtons, getSlotCode } = require("./uiBuilders");
 const { hasSubclasses, getSubclasses } = require("./roleClasses");
-const { createLoot, getLoot, markSold, markPaid, markStamp, setLootHolder } = require("./lootManager");
+const { createLoot, getLoot, deleteLoot, markSold, markPaid, markStamp, setLootHolder } = require("./lootManager");
+const { getLootChannel } = require("./guildConfigManager");
 
 // Finish and Disband can be used by the party leader OR anyone with server
 // Administrator permission (mods stepping in for an absent/AFK leader).
@@ -210,7 +211,12 @@ function buildLootButtons(recapMessageId, record) {
         .setCustomId(`party:changeholderbtn:${recapMessageId}`)
         .setLabel("Ubah Pembawa Loot")
         .setEmoji("👑")
-        .setStyle(ButtonStyle.Secondary)
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`party:deletelootbtn:${recapMessageId}`)
+        .setLabel("Delete")
+        .setEmoji("🗑️")
+        .setStyle(ButtonStyle.Danger)
     ),
   ];
 }
@@ -366,6 +372,38 @@ async function handleButton(interaction) {
       components: [new ActionRowBuilder().addComponents(menu)],
       flags: MessageFlags.Ephemeral,
     });
+  }
+
+  if (action === "deletelootbtn") {
+    const recapMessageId = parts[2];
+    const record = getLoot(recapMessageId);
+    if (!record) {
+      return interaction.reply({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({
+        content: "Hanya server admin yang bisa menghapus loot thread ini.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    deleteLoot(recapMessageId);
+
+    // The recap message lives inside the thread itself, so this button's
+    // channel IS the thread — deleting it removes the whole thread.
+    try {
+      await interaction.channel.delete();
+    } catch (err) {
+      return interaction.reply({
+        content: "Data loot sudah dihapus, tapi gagal menghapus thread — cek permission bot (Manage Threads).",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    return;
   }
 
   if (action === "changeholderbtn") {
@@ -1086,13 +1124,15 @@ async function handleFinishModalSubmit(interaction) {
   };
   const recapEmbed = buildLootRecapEmbed(lootRecord);
 
-  // If LOOT_THREAD_CHANNEL_ID is set in .env, loot threads get created
-  // there instead of the party's own channel. Falls back to the party's
-  // channel if unset or if that channel can't be fetched.
+  // If this server has registered a loot channel via /config
+  // set-loot-channel, threads get created there instead of the party's
+  // own channel. Falls back to the party's channel if unset or if that
+  // channel can't be fetched.
   let threadChannel = interaction.channel;
-  if (process.env.LOOT_THREAD_CHANNEL_ID) {
+  const configuredLootChannelId = getLootChannel(interaction.guildId);
+  if (configuredLootChannelId) {
     try {
-      threadChannel = await interaction.client.channels.fetch(process.env.LOOT_THREAD_CHANNEL_ID);
+      threadChannel = await interaction.client.channels.fetch(configuredLootChannelId);
     } catch (err) {
       // Fall back to the current channel if the configured one is invalid
       // (wrong ID, bot removed from it, etc.) rather than failing outright.

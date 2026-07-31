@@ -4,6 +4,18 @@
 
 const parties = new Map();
 
+// The built-in default party composition, used when a server hasn't set
+// its own default via /config set-default-party. Total: 8 members.
+const FACTORY_DEFAULT_ROLE_CAPS = {
+  tank: 1,
+  healer: 1,
+  swordmaster: 1,
+  mercenary: 1,
+  sorceress: 1,
+  acrobat: 1,
+  flexible: 2,
+};
+
 // Full labels (emoji + name) shown in the embed roster fields.
 const ROLE_LABELS = {
   tank: "🛡️ Paladin",
@@ -117,6 +129,7 @@ function getAllMemberIds(party) {
 
 module.exports = {
   ROLE_LABELS,
+  FACTORY_DEFAULT_ROLE_CAPS,
   createParty,
   getParty,
   getAllParties,
