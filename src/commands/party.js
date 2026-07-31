@@ -3,8 +3,10 @@ const {
   createParty,
   getAllParties,
   rekeyParty,
+  FACTORY_DEFAULT_ROLE_CAPS,
 } = require("../handlers/partyManager");
 const { buildPartyEmbed, buildPartyButtons } = require("../handlers/uiBuilders");
+const { getDefaultPartyComp } = require("../handlers/guildConfigManager");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -22,43 +24,50 @@ module.exports = {
         )
         .addIntegerOption((opt) =>
           opt
-            .setName("tanks")
-            .setDescription("Tank slots needed (default: 1)")
+            .setName("paladins")
+            .setDescription("Paladin slots needed (uses server default if blank)")
             .setMinValue(0)
             .setMaxValue(10)
         )
         .addIntegerOption((opt) =>
           opt
             .setName("healers")
-            .setDescription("Healer slots needed (default: 1)")
+            .setDescription("Healer slots needed (uses server default if blank)")
             .setMinValue(0)
             .setMaxValue(10)
         )
         .addIntegerOption((opt) =>
           opt
             .setName("swordmasters")
-            .setDescription("Swordmaster (SM) slots needed (default: 1)")
+            .setDescription("Swordmaster (SM) slots needed (uses server default if blank)")
             .setMinValue(0)
             .setMaxValue(10)
         )
         .addIntegerOption((opt) =>
           opt
             .setName("mercenaries")
-            .setDescription("Mercenary (Merc) slots needed (default: 1)")
+            .setDescription("Mercenary (Merc) slots needed (uses server default if blank)")
             .setMinValue(0)
             .setMaxValue(10)
         )
         .addIntegerOption((opt) =>
           opt
             .setName("sorceresses")
-            .setDescription("Sorceress slots needed (default: 1)")
+            .setDescription("Sorceress slots needed (uses server default if blank)")
+            .setMinValue(0)
+            .setMaxValue(10)
+        )
+        .addIntegerOption((opt) =>
+          opt
+            .setName("acrobats")
+            .setDescription("Acrobat slots needed (uses server default if blank)")
             .setMinValue(0)
             .setMaxValue(10)
         )
         .addIntegerOption((opt) =>
           opt
             .setName("flexible")
-            .setDescription("Flexible (DPS) slots needed (default: 3)")
+            .setDescription("Flexible (DPS) slots needed (uses server default if blank)")
             .setMinValue(0)
             .setMaxValue(20)
         )
@@ -67,6 +76,9 @@ module.exports = {
         )
         .addStringOption((opt) =>
           opt.setName("note").setDescription("Any extra info, e.g. min item level")
+        )
+        .addStringOption((opt) =>
+          opt.setName("nest_type").setDescription("Jenis Nest, misalnya 'Elite' atau 'Hard Mode'")
         )
     )
     .addSubcommand((sub) =>
@@ -90,19 +102,26 @@ module.exports = {
       const activity = interaction.options.getString("activity");
       const time = interaction.options.getString("time");
       const note = interaction.options.getString("note");
+      const nestType = interaction.options.getString("nest_type");
+
+      // Fallback chain per role: what the person typed → this server's
+      // custom default (if an admin set one via /config) → the bot's
+      // built-in factory default.
+      const serverDefaults = getDefaultPartyComp(interaction.guildId) ?? FACTORY_DEFAULT_ROLE_CAPS;
       const roleCaps = {
-        tank: interaction.options.getInteger("tanks") ?? 1,
-        healer: interaction.options.getInteger("healers") ?? 1,
-        swordmaster: interaction.options.getInteger("swordmasters") ?? 1,
-        mercenary: interaction.options.getInteger("mercenaries") ?? 1,
-        sorceress: interaction.options.getInteger("sorceresses") ?? 1,
-        flexible: interaction.options.getInteger("flexible") ?? 3,
+        tank: interaction.options.getInteger("paladins") ?? serverDefaults.tank,
+        healer: interaction.options.getInteger("healers") ?? serverDefaults.healer,
+        swordmaster: interaction.options.getInteger("swordmasters") ?? serverDefaults.swordmaster,
+        mercenary: interaction.options.getInteger("mercenaries") ?? serverDefaults.mercenary,
+        sorceress: interaction.options.getInteger("sorceresses") ?? serverDefaults.sorceress,
+        acrobat: interaction.options.getInteger("acrobats") ?? serverDefaults.acrobat,
+        flexible: interaction.options.getInteger("flexible") ?? serverDefaults.flexible,
       };
 
       if (Object.values(roleCaps).every((c) => c === 0)) {
         return interaction.reply({
           content:
-            "You need at least one open role slot (tanks, healers, swordmasters, mercenaries, sorceresses, or flexible) to create a party.",
+            "You need at least one open role slot (paladins, healers, swordmasters, mercenaries, sorceresses, acrobats, or flexible) to create a party.",
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -117,6 +136,7 @@ module.exports = {
         activity,
         time,
         note,
+        nestType,
         roleCaps,
       });
 

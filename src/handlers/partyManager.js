@@ -4,28 +4,30 @@
 
 const parties = new Map();
 
+// The built-in default party composition, used when a server hasn't set
+// its own default via /config set-default-party. Total: 8 members.
+const FACTORY_DEFAULT_ROLE_CAPS = {
+  tank: 1,
+  healer: 1,
+  swordmaster: 1,
+  mercenary: 1,
+  sorceress: 1,
+  acrobat: 1,
+  flexible: 2,
+};
+
 // Full labels (emoji + name) shown in the embed roster fields.
 const ROLE_LABELS = {
-  tank: "🛡️ Tanks",
+  tank: "🛡️ Paladin",
   healer: "❤️ Healers",
   swordmaster: "⚔️ Swordmasters",
   mercenary: "🗡️ Mercenaries",
   sorceress: "🔮 Sorceresses",
+  acrobat: "🤸 Acrobats",
   flexible: "🔀 Flexible (DPS)",
 };
 
-// Short labels for button text — buttons have limited horizontal space,
-// especially with 5 roles in one row.
-const ROLE_BUTTON_LABELS = {
-  tank: "Tanks",
-  healer: "Healers",
-  swordmaster: "SM",
-  mercenary: "Merc",
-  sorceress: "Sorc",
-  flexible: "Flex",
-};
-
-function createParty({ messageId, channelId, leaderId, activity, time, note, roleCaps }) {
+function createParty({ messageId, channelId, leaderId, activity, time, note, nestType, roleCaps }) {
   const roles = {};
   for (const [key, cap] of Object.entries(roleCaps)) {
     if (cap > 0) {
@@ -40,6 +42,7 @@ function createParty({ messageId, channelId, leaderId, activity, time, note, rol
     activity,
     time: time || null,
     note: note || null,
+    nestType: nestType || null,
     roles,
     createdAt: Date.now(),
   };
@@ -126,7 +129,7 @@ function getAllMemberIds(party) {
 
 module.exports = {
   ROLE_LABELS,
-  ROLE_BUTTON_LABELS,
+  FACTORY_DEFAULT_ROLE_CAPS,
   createParty,
   getParty,
   getAllParties,
