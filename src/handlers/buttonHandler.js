@@ -391,6 +391,58 @@ async function handleButton(interaction) {
       });
     }
 
+    const confirmRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`party:deletelootconfirm:yes:${recapMessageId}`)
+        .setLabel("Ya, hapus thread")
+        .setEmoji("🗑️")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`party:deletelootconfirm:no:${recapMessageId}`)
+        .setLabel("Batal")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return interaction.reply({
+      content: "⚠️ Yakin mau hapus thread loot ini? Aksi ini tidak bisa dibatalkan.",
+      components: [confirmRow],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  if (action === "deletelootconfirm") {
+    const choice = parts[2]; // "yes" or "no"
+    const recapMessageId = parts[3];
+    const record = getLoot(recapMessageId);
+
+    if (!record) {
+      return interaction.update({
+        content: "Data loot untuk party ini sudah tidak tersedia.",
+        components: [],
+      });
+    }
+
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.update({
+        content: "Hanya server admin yang bisa menghapus loot thread ini.",
+        components: [],
+      });
+    }
+
+    if (choice === "no") {
+      return interaction.update({
+        content: "👍 Dibatalkan — thread tidak dihapus.",
+        components: [],
+      });
+    }
+
+    // Acknowledge first, then delete — once the thread is gone, there's
+    // no channel left to send a response into.
+    await interaction.update({
+      content: "🗑️ Menghapus thread...",
+      components: [],
+    });
+
     deleteLoot(recapMessageId);
 
     // The recap message lives inside the thread itself, so this button's
@@ -398,7 +450,9 @@ async function handleButton(interaction) {
     try {
       await interaction.channel.delete();
     } catch (err) {
-      return interaction.reply({
+      // Can't send a normal reply since we already used update() above —
+      // follow up instead so the admin still sees the failure.
+      await interaction.followUp({
         content: "Data loot sudah dihapus, tapi gagal menghapus thread — cek permission bot (Manage Threads).",
         flags: MessageFlags.Ephemeral,
       });
