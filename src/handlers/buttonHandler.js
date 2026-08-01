@@ -1,6 +1,7 @@
 const {
   MessageFlags,
   StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
   ActionRowBuilder,
   ModalBuilder,
   TextInputBuilder,
@@ -584,6 +585,40 @@ async function handleButton(interaction) {
     return interaction.showModal(modal);
   }
 
+  if (action === "assign") {
+    if (!isLeaderOrAdmin(interaction, party)) {
+      return interaction.reply({
+        content: "Only the party leader or a server admin can assign members to a role.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    const openRoleOptions = Object.entries(party.roles)
+      .filter(([, role]) => role.members.length < role.cap)
+      .map(([roleKey, role]) => ({
+        label: `${ROLE_LABELS[roleKey]} (${role.cap - role.members.length} open)`,
+        value: roleKey,
+      }));
+
+    if (openRoleOptions.length === 0) {
+      return interaction.reply({
+        content: "Every role is already full — there's nothing open to assign someone to.",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`party:assignrole:${party.messageId}`)
+      .setPlaceholder("Which role do you want to fill?")
+      .addOptions(openRoleOptions);
+
+    return interaction.reply({
+      content: "Which open role do you want to assign someone to?",
+      components: [new ActionRowBuilder().addComponents(menu)],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
   if (action === "kick") {
     if (interaction.user.id !== party.leaderId) {
       return interaction.reply({
@@ -716,6 +751,124 @@ async function handleButton(interaction) {
 async function handleSelectMenu(interaction) {
   const parts = interaction.customId.split(":");
   const action = parts[1];
+
+  if (action === "assignrole") {
+    const [, , messageId] = parts;
+    const party = getParty(messageId);
+
+    if (!party) {
+      return interaction.update({ content: "This party no longer exists.", components: [] });
+    }
+    if (!isLeaderOrAdmin(interaction, party)) {
+      return interaction.update({
+        content: "Only the party leader or a server admin can assign members to a role.",
+        components: [],
+      });
+    }
+
+    const roleKey = interaction.values[0];
+    const role = party.roles[roleKey];
+    if (!role || role.members.length >= role.cap) {
+      return interaction.update({
+        content: "That role just filled up — try a different one.",
+        components: [],
+      });
+    }
+
+    const userMenu = new UserSelectMenuBuilder()
+      .setCustomId(`party:assignuser:${messageId}:${roleKey}`)
+      .setPlaceholder(`Who should fill ${ROLE_LABELS[roleKey]}?`);
+
+    return interaction.update({
+      content: `Pick who to assign to **${ROLE_LABELS[roleKey]}**:`,
+      components: [new ActionRowBuilder().addComponents(userMenu)],
+    });
+  }
+
+  if (action === "assignuser") {
+    const [, , messageId, roleKey] = parts;
+    const party = getParty(messageId);
+
+    if (!party) {
+      return interaction.update({ content: "This party no longer exists.", components: [] });
+    }
+    if (!isLeaderOrAdmin(interaction, party)) {
+      return interaction.update({
+        content: "Only the party leader or a server admin can assign members to a role.",
+        components: [],
+      });
+    }
+
+    const role = party.roles[roleKey];
+    if (!role || role.members.length >= role.cap) {
+      return interaction.update({
+        content: "That role just filled up — try a different one.",
+        components: [],
+      });
+    }
+
+    const targetUserId = interaction.values[0];
+    // interaction.users is a Collection of resolved User objects that comes
+    // bundled with a UserSelectMenu interaction — no extra API call needed.
+    const targetUsername = interaction.users?.get(targetUserId)?.username ?? targetUserId;
+
+    if (hasSubclasses(roleKey)) {
+      const subclasses = getSubclasses(roleKey);
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`party:assignclass:${messageId}:${roleKey}:${targetUserId}`)
+        .setPlaceholder(`Which class for ${targetUsername}?`) // placeholders are plain text — mentions don't render here
+        .addOptions(subclasses.map((subclass) => ({ label: subclass, value: subclass })));
+
+      return interaction.update({
+        content: `Which class should <@${targetUserId}> be assigned as ${ROLE_LABELS[roleKey]}?`,
+        components: [new ActionRowBuilder().addComponents(menu)],
+      });
+    }
+
+    const result = joinRole(messageId, targetUserId, roleKey);
+    if (result === "full") {
+      return interaction.update({
+        content: "That role just filled up — try a different one.",
+        components: [],
+      });
+    }
+
+    await refreshPartyMessage(interaction.client, party);
+    return interaction.update({
+      content: `Assigned <@${targetUserId}> to ${ROLE_LABELS[roleKey]}.`,
+      components: [],
+    });
+  }
+
+  if (action === "assignclass") {
+    const [, , messageId, roleKey, targetUserId] = parts;
+    const party = getParty(messageId);
+
+    if (!party) {
+      return interaction.update({ content: "This party no longer exists.", components: [] });
+    }
+    if (!isLeaderOrAdmin(interaction, party)) {
+      return interaction.update({
+        content: "Only the party leader or a server admin can assign members to a role.",
+        components: [],
+      });
+    }
+
+    const subclass = interaction.values[0];
+    const result = joinRole(messageId, targetUserId, roleKey, subclass);
+    if (result === "full") {
+      return interaction.update({
+        content: "That role just filled up — try a different one.",
+        components: [],
+      });
+    }
+
+    await refreshPartyMessage(interaction.client, party);
+    return interaction.update({
+      content: `Assigned <@${targetUserId}> as **${subclass}** ${ROLE_LABELS[roleKey]}.`,
+      components: [],
+    });
+  }
 
   if (action === "kickselect") {
     const [, , messageId] = parts;

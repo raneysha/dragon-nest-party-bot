@@ -28,7 +28,10 @@ client.on("interactionCreate", async (interaction) => {
       await command.execute(interaction);
     } else if (interaction.isButton() && interaction.customId.startsWith("party:")) {
       await handleButton(interaction);
-    } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith("party:")) {
+    } else if (
+      (interaction.isStringSelectMenu() || interaction.isUserSelectMenu()) &&
+      interaction.customId.startsWith("party:")
+    ) {
       await handleSelectMenu(interaction);
     } else if (interaction.isModalSubmit() && interaction.customId.startsWith("party:")) {
       await handleModalSubmit(interaction);

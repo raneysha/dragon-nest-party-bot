@@ -112,41 +112,52 @@ function buildPartyButtons(party) {
   });
 
   // Always push whatever's left in the role-buttons row (even a partial
-  // one) before starting a fresh row for Leave/Disband — otherwise role
-  // buttons and these two can overflow past the 5-per-row limit together.
+  // one) before starting a fresh row for the action buttons — otherwise
+  // role buttons and these can overflow past the 5-per-row limit together.
   if (row.components.length > 0) {
     rows.push(row);
   }
-  row = new ActionRowBuilder();
 
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId("party:ping")
-      .setLabel("Ping")
-      .setEmoji("📣")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("party:leave")
-      .setLabel("Leave")
-      .setEmoji("🚪")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("party:kick")
-      .setLabel("Kick")
-      .setEmoji("👢")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("party:finish")
-      .setLabel("Finish")
-      .setEmoji("✅")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("party:disband")
-      .setLabel("Disband")
-      .setEmoji("💥")
-      .setStyle(ButtonStyle.Danger)
+  // Split across two rows of 3 (instead of one packed row) since adding
+  // Assign brought the action button count to 6 — one row can only hold 5.
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("party:ping")
+        .setLabel("Ping")
+        .setEmoji("📣")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("party:leave")
+        .setLabel("Leave")
+        .setEmoji("🚪")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("party:assign")
+        .setLabel("Assign")
+        .setEmoji("👑")
+        .setStyle(ButtonStyle.Secondary)
+    )
   );
-  rows.push(row);
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("party:kick")
+        .setLabel("Kick")
+        .setEmoji("👢")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("party:finish")
+        .setLabel("Finish")
+        .setEmoji("✅")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("party:disband")
+        .setLabel("Disband")
+        .setEmoji("💥")
+        .setStyle(ButtonStyle.Danger)
+    )
+  );
 
   return rows;
 }
