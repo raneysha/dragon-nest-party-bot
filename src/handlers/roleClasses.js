@@ -10,7 +10,7 @@ const ROLE_SUBCLASSES = {
   mercenary: ["Destroyer", "Barbarian"],
   sorceress: ["Elestra", "Saleana", "Majesty", "Smasher"],
   acrobat: ["Tempest", "Wind Walker"],
-  flexible: ["Moonlord", "Gladiator", "Destroyer", "Barbarian", "Dark Avenger", "Guardian", "Crusader", "Saint", "Inquisitor", "Elestra", "Saleana", "Majesty", "Smasher", "Wind Walker", "Tempest", "Artillery", "Sniper", "Adept", "Physician", "Shooting Star", "Gear Master", "Spirit Dancer", "Blade Dancer", "Dark Summoner", "Soul Eater"],
+  flexible: ["Moonlord", "Gladiator", "Destroyer", "Barbarian", "Dark Avenger", "Guardian", "Crusader", "Saint", "Inquisitor", "Elestra", "Saleana", "Majesty", "Smasher", "Wind Walker", "Tempest", "Artillery", "Sniper", "Adept", "Physician", "Shooting Star", "Gear Master", "Spirit Dancer", "Blade Dancer", "Dark Summoner", "Soul Eater", "Raven", "Ripper", "Abyss Walker", "Light Fury"],
 };
 
 function getSubclasses(roleKey) {
