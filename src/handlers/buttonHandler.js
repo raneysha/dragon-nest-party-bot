@@ -580,7 +580,7 @@ async function handleButton(interaction) {
   }
 
   if (action === "ping") {
-    if (!isMember(party, interaction.user.id)) {
+    if (!isMember(party, interaction.user.id) && !isLeaderOrAdmin(interaction, party)) {
       return interaction.reply({
         content: "You need to join the party before you can ping it.",
         flags: MessageFlags.Ephemeral,
@@ -638,9 +638,9 @@ async function handleButton(interaction) {
   }
 
   if (action === "kick") {
-    if (interaction.user.id !== party.leaderId) {
+    if (!isLeaderOrAdmin(interaction, party)) {
       return interaction.reply({
-        content: "Only the party leader can kick members.",
+        content: "Only the party leader or a server admin can kick members.",
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -904,9 +904,9 @@ async function handleSelectMenu(interaction) {
     if (!party) {
       return interaction.update({ content: "This party no longer exists.", components: [] });
     }
-    if (interaction.user.id !== party.leaderId) {
+    if (!isLeaderOrAdmin(interaction, party)) {
       return interaction.update({
-        content: "Only the party leader can kick members.",
+        content: "Only the party leader or a server admin can kick members.",
         components: [],
       });
     }
@@ -1277,7 +1277,7 @@ async function handleModalSubmit(interaction) {
 
   // Double-check membership at submit time too — someone could leave the
   // party in the time between opening the modal and submitting it.
-  if (!isMember(party, interaction.user.id)) {
+  if (!isMember(party, interaction.user.id) && !isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
       content: "You need to join the party before you can ping it.",
       flags: MessageFlags.Ephemeral,

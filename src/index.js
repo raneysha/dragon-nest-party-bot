@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Collection, MessageFlags } = require("discord
 const path = require("node:path");
 const fs = require("node:fs");
 const { handleButton, handleSelectMenu, handleModalSubmit } = require("./handlers/buttonHandler");
+const { handleBetButton, handleBetSelectMenu } = require("./handlers/betHandler");
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
@@ -26,6 +27,10 @@ client.on("interactionCreate", async (interaction) => {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
       await command.execute(interaction);
+    } else if (interaction.isAutocomplete()) {
+      const command = client.commands.get(interaction.commandName);
+      if (!command || !command.autocomplete) return;
+      await command.autocomplete(interaction);
     } else if (interaction.isButton() && interaction.customId.startsWith("party:")) {
       await handleButton(interaction);
     } else if (
@@ -35,6 +40,10 @@ client.on("interactionCreate", async (interaction) => {
       await handleSelectMenu(interaction);
     } else if (interaction.isModalSubmit() && interaction.customId.startsWith("party:")) {
       await handleModalSubmit(interaction);
+    } else if (interaction.isButton() && interaction.customId.startsWith("bet:")) {
+      await handleBetButton(interaction);
+    } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith("bet:")) {
+      await handleBetSelectMenu(interaction);
     }
   } catch (err) {
     console.error(err);

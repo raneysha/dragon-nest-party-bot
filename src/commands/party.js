@@ -104,19 +104,39 @@ module.exports = {
       const note = interaction.options.getString("note");
       const nestType = interaction.options.getString("nest_type");
 
-      // Fallback chain per role: what the person typed → this server's
-      // custom default (if an admin set one via /config) → the bot's
-      // built-in factory default.
-      const serverDefaults = getDefaultPartyComp(interaction.guildId) ?? FACTORY_DEFAULT_ROLE_CAPS;
-      const roleCaps = {
-        tank: interaction.options.getInteger("paladins") ?? serverDefaults.tank,
-        healer: interaction.options.getInteger("healers") ?? serverDefaults.healer,
-        swordmaster: interaction.options.getInteger("swordmasters") ?? serverDefaults.swordmaster,
-        mercenary: interaction.options.getInteger("mercenaries") ?? serverDefaults.mercenary,
-        sorceress: interaction.options.getInteger("sorceresses") ?? serverDefaults.sorceress,
-        acrobat: interaction.options.getInteger("acrobats") ?? serverDefaults.acrobat,
-        flexible: interaction.options.getInteger("flexible") ?? serverDefaults.flexible,
+      // If the user specified ANY role slot, treat this as a custom
+      // composition: only the roles they typed go into the party, and
+      // everything else they left blank is 0 — no default fallback.
+      // Only when they specify NO roles at all do we fall back to this
+      // server's custom default (if an admin set one via /config), or
+      // the bot's built-in factory default.
+      const typedRoleCaps = {
+        tank: interaction.options.getInteger("paladins"),
+        healer: interaction.options.getInteger("healers"),
+        swordmaster: interaction.options.getInteger("swordmasters"),
+        mercenary: interaction.options.getInteger("mercenaries"),
+        sorceress: interaction.options.getInteger("sorceresses"),
+        acrobat: interaction.options.getInteger("acrobats"),
+        flexible: interaction.options.getInteger("flexible"),
       };
+
+      const anyRoleTyped = Object.values(typedRoleCaps).some((v) => v !== null);
+
+      let roleCaps;
+      if (anyRoleTyped) {
+        roleCaps = {
+          tank: typedRoleCaps.tank ?? 0,
+          healer: typedRoleCaps.healer ?? 0,
+          swordmaster: typedRoleCaps.swordmaster ?? 0,
+          mercenary: typedRoleCaps.mercenary ?? 0,
+          sorceress: typedRoleCaps.sorceress ?? 0,
+          acrobat: typedRoleCaps.acrobat ?? 0,
+          flexible: typedRoleCaps.flexible ?? 0,
+        };
+      } else {
+        const serverDefaults = getDefaultPartyComp(interaction.guildId) ?? FACTORY_DEFAULT_ROLE_CAPS;
+        roleCaps = { ...serverDefaults };
+      }
 
       if (Object.values(roleCaps).every((c) => c === 0)) {
         return interaction.reply({
