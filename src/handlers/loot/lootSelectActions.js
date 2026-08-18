@@ -1,5 +1,5 @@
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require("discord.js");
-const { getLoot, markPaid, markStamp, setLootHolder } = require("../lootManager");
+const { getLoot, markPaid, setLootHolder } = require("../lootManager");
 const { buildLootRecapEmbed, buildLootButtons, isLootHolder } = require("./lootUiBuilders");
 
 async function handleSoldSelect(interaction, parts) {
