@@ -1,65 +1,66 @@
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const { ROLE_LABELS, isFull, getAllMemberIds } = require("./partyManager");
+const { t } = require("../i18n");
 
-// ROLE_LABELS values are "<emoji> <name>" — this pulls just the leading
-// emoji out regardless of how many words follow (so multi-word names like
-// "Flexible (DPS)" don't break button rendering).
-function roleEmoji(roleKey) {
-  return ROLE_LABELS[roleKey].split(" ")[0];
-}
-
-// Short codes used in the roster list. Roles get numbered only when more
-// than one slot is open (PL, then PL1/PL2/...). Flexible always numbers
-// its slots (DPS1, DPS2...) since those are naturally interchangeable and
-// can be many.
-const ROLE_CODES = {
+const ROLE_BUTTON_CODES = {
   tank: "PL",
-  healer: "PR",
+  healer: "HL",
   swordmaster: "SM",
   mercenary: "MC",
-  sorceress: "Sorce",
-  acrobat: "Arc",
-  flexible: "DPS",
+  sorceress: "SC",
+  acrobat: "AC",
+  flexible: "FLX",
 };
 
-function getSlotCode(roleKey, index, cap) {
-  if (roleKey === "flexible") {
-    return `${ROLE_CODES.flexible}${index + 1}`;
-  }
-  const code = ROLE_CODES[roleKey] || roleKey.toUpperCase();
-  return cap > 1 ? `${code}${index + 1}` : code;
-}
+const ROLE_EMOJIS = {
+  tank: "🛡️",
+  healer: "💉",
+  swordmaster: "⚔️",
+  mercenary: "🔨",
+  sorceress: "🔥",
+  acrobat: "🏹",
+  flexible: "🎯",
+};
 
-// The label shown on the join button itself — one button covers the whole
-// role (not a single slot).
 function getRoleButtonCode(roleKey) {
-  return ROLE_CODES[roleKey] || roleKey.toUpperCase();
+  return ROLE_BUTTON_CODES[roleKey] || roleKey.slice(0, 3).toUpperCase();
 }
 
-function buildPartyEmbed(party) {
+function roleEmoji(roleKey) {
+  return ROLE_EMOJIS[roleKey] || "🔹";
+}
+
+// Builds a roster-line code like "PL1", "FLX2" — the short prefix per
+// role, with a number suffix only when that role has more than one slot
+// (a single-slot role like Healer just shows "HL", not "HL1").
+function getSlotCode(roleKey, index, cap) {
+  const prefix = getRoleButtonCode(roleKey);
+  return cap > 1 ? `${prefix}${index + 1}` : prefix;
+}
+
+function buildPartyEmbed(party, guildId) {
   const embed = new EmbedBuilder()
     .setTitle(`🗡️ ${party.activity}`)
     .setColor(isFull(party) ? 0x2ecc71 : 0x5865f2)
     .setFooter({
-      text: isFull(party) ? "Party is full!" : "Tap a role below to join",
+      text: t(guildId, isFull(party) ? "party.embed.full" : "party.embed.tapToJoin"),
     })
     .setTimestamp(party.createdAt);
 
   const details = [];
-  if (party.time) details.push(`🕒 **When:** ${party.time}`);
-  details.push(`👑 **Leader:** <@${party.leaderId}>`);
-  if (party.note) details.push(`📝 **Note:** ${party.note}`);
+  if (party.time) details.push(t(guildId, "party.embed.when", { time: party.time }));
+  details.push(t(guildId, "party.embed.leader", { leaderId: party.leaderId }));
+  if (party.note) details.push(t(guildId, "party.embed.note", { note: party.note }));
 
   const totalCap = Object.values(party.roles).reduce((sum, r) => sum + r.cap, 0);
   const totalJoined = getAllMemberIds(party).length;
-  details.push(`\nStatus : ${isFull(party) ? "FULL" : "OPEN"}`);
-  details.push(`Members : ${totalJoined}/${totalCap}`);
-  if (party.nestType) details.push(`Raid Nest : ${party.nestType}`);
+  details.push(
+    `\n${t(guildId, "party.embed.status", {
+      status: t(guildId, isFull(party) ? "party.embed.statusFull" : "party.embed.statusOpen"),
+    })}`
+  );
+  details.push(t(guildId, "party.embed.members", { joined: totalJoined, total: totalCap }));
+  if (party.nestType) details.push(t(guildId, "party.embed.raidNest", { nestType: party.nestType }));
 
   embed.setDescription(details.join("\n"));
 
@@ -70,14 +71,12 @@ function buildPartyEmbed(party) {
       const member = role.members[i];
       const value = member
         ? `${member.subclass ? `${member.subclass} ` : ""}<@${member.userId}>`
-        : "_open_";
+        : t(guildId, "party.embed.openSlot");
       rosterEntries.push({ code, value });
     }
   }
   const maxCodeLength = Math.max(...rosterEntries.map((e) => e.code.length));
-  const rosterLines = rosterEntries.map(
-    (e) => `\`${e.code.padEnd(maxCodeLength)}\` : ${e.value}`
-  );
+  const rosterLines = rosterEntries.map((e) => `\`${e.code.padEnd(maxCodeLength)}\` : ${e.value}`);
   embed.addFields({
     name: "\u200b",
     value: rosterLines.join("\n"),
@@ -87,7 +86,7 @@ function buildPartyEmbed(party) {
   return embed;
 }
 
-function buildPartyButtons(party) {
+function buildPartyButtons(party, guildId) {
   const rows = [];
   let row = new ActionRowBuilder();
 
@@ -124,17 +123,17 @@ function buildPartyButtons(party) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("party:ping")
-        .setLabel("Ping")
+        .setLabel(t(guildId, "party.buttons.ping"))
         .setEmoji("📣")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("party:leave")
-        .setLabel("Leave")
+        .setLabel(t(guildId, "party.buttons.leave"))
         .setEmoji("🚪")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("party:assign")
-        .setLabel("Assign")
+        .setLabel(t(guildId, "party.buttons.assign"))
         .setEmoji("👑")
         .setStyle(ButtonStyle.Secondary)
     )
@@ -143,17 +142,17 @@ function buildPartyButtons(party) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("party:kick")
-        .setLabel("Kick")
+        .setLabel(t(guildId, "party.buttons.kick"))
         .setEmoji("👢")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("party:finish")
-        .setLabel("Finish")
+        .setLabel(t(guildId, "party.buttons.finish"))
         .setEmoji("✅")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId("party:disband")
-        .setLabel("Disband")
+        .setLabel(t(guildId, "party.buttons.disband"))
         .setEmoji("💥")
         .setStyle(ButtonStyle.Danger)
     )

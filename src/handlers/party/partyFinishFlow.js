@@ -5,11 +5,13 @@ const { isLeaderOrAdmin } = require("../shared/permissions");
 const { createLoot } = require("../lootManager");
 const { getLootChannel } = require("../guildConfigManager");
 const { buildLootRecapEmbed, buildLootButtons } = require("../loot/lootUiBuilders");
+const { t } = require("../../i18n");
 
 // Builds the loot thread's name in the requested format:
 // [Party name] [Date Cleared] [Loot holder]
 // Discord thread names are capped at 100 characters, so this truncates
-// if needed rather than letting the API call fail.
+// if needed rather than letting the API call fail. Kept untranslated —
+// thread titles are metadata, not conversational text.
 function buildFinishThreadName(activity, dateCleared, lootHolder) {
   const name = `[${activity}] [${dateCleared}] [${lootHolder}]`;
   return name.length > 100 ? name.slice(0, 100) : name;
@@ -49,14 +51,14 @@ async function handleFinishModalSubmit(interaction) {
 
   if (!party) {
     return interaction.reply({
-      content: "This party no longer exists.",
+      content: t(interaction.guildId, "common.partyGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "Only the party leader or a server admin can finish this party.",
+      content: t(interaction.guildId, "party.finish.denied"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -102,7 +104,7 @@ async function handleFinishModalSubmit(interaction) {
     roster: buildLootRoster(party),
     items: lootItems,
   };
-  const recapEmbed = buildLootRecapEmbed(lootRecord);
+  const recapEmbed = buildLootRecapEmbed(lootRecord, interaction.guildId);
 
   // If this server has registered a loot channel via /config
   // set-loot-channel, threads get created there instead of the party's
@@ -143,9 +145,7 @@ async function handleFinishModalSubmit(interaction) {
     }
   } catch (err) {
     return interaction.editReply({
-      content:
-        "Party was finished, but I couldn't create the loot thread — check that I have the " +
-        '"Create Public Threads" permission (or "Create Posts" for forum channels) there.',
+      content: t(interaction.guildId, "party.finish.threadFailed"),
     });
   }
 
@@ -173,23 +173,23 @@ async function handleFinishModalSubmit(interaction) {
   // Now that we know the recap message's ID, register the loot record
   // under it and attach the Sold button (its customId needs that ID).
   createLoot(recapMessage.id, lootRecord);
-  await recapMessage.edit({ components: buildLootButtons(recapMessage.id, lootRecord) });
+  await recapMessage.edit({ components: buildLootButtons(recapMessage.id, lootRecord, interaction.guildId) });
 
   const confirmRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`party:finishconfirm:yes:${messageId}`)
-      .setLabel("Yes, disband")
+      .setLabel(t(interaction.guildId, "party.finishconfirm.yes"))
       .setEmoji("💥")
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId(`party:finishconfirm:no:${messageId}`)
-      .setLabel("No, keep it open")
+      .setLabel(t(interaction.guildId, "party.finishconfirm.no"))
       .setEmoji("🔁")
       .setStyle(ButtonStyle.Secondary)
   );
 
   return interaction.editReply({
-    content: `✅ Loot thread created: ${thread}\n\nDo you also want to disband this party listing?`,
+    content: t(interaction.guildId, "party.finish.threadCreated", { thread }),
     components: [confirmRow],
   });
 }

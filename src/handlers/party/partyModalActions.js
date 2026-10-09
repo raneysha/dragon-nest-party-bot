@@ -1,6 +1,7 @@
 const { MessageFlags } = require("discord.js");
 const { getParty, isMember, getAllMemberIds } = require("../partyManager");
 const { isLeaderOrAdmin } = require("../shared/permissions");
+const { t } = require("../../i18n");
 
 // customId format: party:pingmodal:<messageId>
 async function handlePingModalSubmit(interaction, parts) {
@@ -8,7 +9,7 @@ async function handlePingModalSubmit(interaction, parts) {
   const party = getParty(messageId);
   if (!party) {
     return interaction.reply({
-      content: "This party no longer exists.",
+      content: t(interaction.guildId, "common.partyGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -17,7 +18,7 @@ async function handlePingModalSubmit(interaction, parts) {
   // party in the time between opening the modal and submitting it.
   if (!isMember(party, interaction.user.id) && !isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "You need to join the party before you can ping it.",
+      content: t(interaction.guildId, "party.ping.needToJoin"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -27,7 +28,12 @@ async function handlePingModalSubmit(interaction, parts) {
   const mentions = memberIds.map((id) => `<@${id}>`).join(" ");
 
   return interaction.reply({
-    content: `📣 **${interaction.user.username}** on **${party.activity}**:\n${message}\n\n${mentions}`,
+    content: t(interaction.guildId, "party.ping.broadcast", {
+      username: interaction.user.username,
+      activity: party.activity,
+      message,
+      mentions,
+    }),
   });
 }
 

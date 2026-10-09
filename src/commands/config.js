@@ -1,9 +1,4 @@
-const {
-  SlashCommandBuilder,
-  MessageFlags,
-  ChannelType,
-  PermissionFlagsBits,
-} = require("discord.js");
+const { SlashCommandBuilder, MessageFlags, PermissionFlagsBits } = require("discord.js");
 const {
   setLootChannel,
   clearLootChannel,
@@ -11,38 +6,12 @@ const {
   setDefaultPartyComp,
   clearDefaultPartyComp,
   getDefaultPartyComp,
+  setLocale,
+  getLocale,
 } = require("../handlers/guildConfigManager");
 const { FACTORY_DEFAULT_ROLE_CAPS } = require("../handlers/partyManager");
+const { t } = require("../i18n");
 
-// Shared role option definitions so /config set-default-party matches
-// /party create's options exactly (same names/descriptions/limits).
-function addRoleCapOptions(sub) {
-  return sub
-    .addIntegerOption((opt) =>
-      opt.setName("paladins").setDescription("Default Paladin slots").setMinValue(0).setMaxValue(10)
-    )
-    .addIntegerOption((opt) =>
-      opt.setName("healers").setDescription("Default Healer slots").setMinValue(0).setMaxValue(10)
-    )
-    .addIntegerOption((opt) =>
-      opt.setName("swordmasters").setDescription("Default Swordmaster slots").setMinValue(0).setMaxValue(10)
-    )
-    .addIntegerOption((opt) =>
-      opt.setName("mercenaries").setDescription("Default Mercenary slots").setMinValue(0).setMaxValue(10)
-    )
-    .addIntegerOption((opt) =>
-      opt.setName("sorceresses").setDescription("Default Sorceress slots").setMinValue(0).setMaxValue(10)
-    )
-    .addIntegerOption((opt) =>
-      opt.setName("acrobats").setDescription("Default Acrobat slots").setMinValue(0).setMaxValue(10)
-    )
-    .addIntegerOption((opt) =>
-      opt.setName("flexible").setDescription("Default Flexible (DPS) slots").setMinValue(0).setMaxValue(20)
-    );
-}
-
-// Maps this command's option names to partyManager's internal role keys —
-// same mapping /party create uses.
 const OPTION_TO_ROLE_KEY = {
   paladins: "tank",
   healers: "healer",
@@ -55,46 +24,59 @@ const OPTION_TO_ROLE_KEY = {
 
 function formatComp(roleCaps) {
   return Object.entries(roleCaps)
-    .map(([key, cap]) => `${key}: ${cap}`)
+    .filter(([, cap]) => cap > 0)
+    .map(([roleKey, cap]) => `${roleKey}: ${cap}`)
     .join(", ");
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("config")
-    .setDescription("Configure server-wide bot settings")
+    .setDescription("Server settings for this bot")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand((sub) =>
       sub
         .setName("set-loot-channel")
-        .setDescription("Set which channel 'Finish' loot threads get created in")
+        .setDescription("Set the channel where loot threads from /party finish are created")
         .addChannelOption((opt) =>
-          opt
-            .setName("channel")
-            .setDescription("A text or forum channel")
-            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildForum)
-            .setRequired(true)
+          opt.setName("channel").setDescription("The channel to create loot threads in").setRequired(true)
         )
     )
     .addSubcommand((sub) =>
-      sub
-        .setName("clear-loot-channel")
-        .setDescription("Unset the loot channel — threads go back to the party's own channel")
-    )
-    .addSubcommand((sub) =>
-      addRoleCapOptions(
-        sub
-          .setName("set-default-party")
-          .setDescription("Set this server's default /party create composition (blank role = built-in default)")
-      )
+      sub.setName("clear-loot-channel").setDescription("Reset loot threads to use the party's own channel")
     )
     .addSubcommand((sub) =>
       sub
-        .setName("clear-default-party")
-        .setDescription("Reset this server back to the bot's built-in default party composition")
+        .setName("set-default-party")
+        .setDescription("Set this server's default party role composition")
+        .addIntegerOption((opt) => opt.setName("paladins").setDescription("Paladin slots").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("healers").setDescription("Healer slots").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("swordmasters").setDescription("Swordmaster slots").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("mercenaries").setDescription("Mercenary slots").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("sorceresses").setDescription("Sorceress slots").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("acrobats").setDescription("Acrobat slots").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("flexible").setDescription("Flexible slots").setMinValue(0))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("clear-default-party").setDescription("Reset to the bot's built-in default composition")
     )
     .addSubcommand((sub) =>
       sub.setName("view").setDescription("Show the current server settings")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("language")
+        .setDescription("Set the language the bot replies in on this server")
+        .addStringOption((opt) =>
+          opt
+            .setName("language")
+            .setDescription("English or Indonesian")
+            .setRequired(true)
+            .addChoices(
+              { name: "English", value: "en" },
+              { name: "Indonesian (Bahasa Indonesia)", value: "id" }
+            )
+        )
     ),
 
   async execute(interaction) {
@@ -103,7 +85,7 @@ module.exports = {
     // check again here.
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return interaction.reply({
-        content: "Only server admins can use this command.",
+        content: t(interaction.guildId, "config.adminOnly"),
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -114,7 +96,7 @@ module.exports = {
       const channel = interaction.options.getChannel("channel");
       setLootChannel(interaction.guildId, channel.id);
       return interaction.reply({
-        content: `✅ Loot threads from \`/party finish\` will now be created in ${channel}.`,
+        content: t(interaction.guildId, "config.setLootChannel.confirm", { channel }),
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -122,7 +104,7 @@ module.exports = {
     if (sub === "clear-loot-channel") {
       clearLootChannel(interaction.guildId);
       return interaction.reply({
-        content: "✅ Loot channel cleared — threads will go back to being created in the party's own channel.",
+        content: t(interaction.guildId, "config.clearLootChannel.confirm"),
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -139,14 +121,14 @@ module.exports = {
 
       if (Object.values(roleCaps).every((c) => c === 0)) {
         return interaction.reply({
-          content: "The default composition needs at least one role slot — can't set everything to 0.",
+          content: t(interaction.guildId, "config.setDefaultParty.needsRole"),
           flags: MessageFlags.Ephemeral,
         });
       }
 
       setDefaultPartyComp(interaction.guildId, roleCaps);
       return interaction.reply({
-        content: `✅ Default party composition updated for this server:\n${formatComp(roleCaps)}`,
+        content: t(interaction.guildId, "config.setDefaultParty.confirm", { comp: formatComp(roleCaps) }),
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -154,22 +136,49 @@ module.exports = {
     if (sub === "clear-default-party") {
       clearDefaultPartyComp(interaction.guildId);
       return interaction.reply({
-        content: `✅ Reset to the bot's built-in default:\n${formatComp(FACTORY_DEFAULT_ROLE_CAPS)}`,
+        content: t(interaction.guildId, "config.clearDefaultParty.confirm", {
+          comp: formatComp(FACTORY_DEFAULT_ROLE_CAPS),
+        }),
         flags: MessageFlags.Ephemeral,
       });
     }
 
     if (sub === "view") {
       const lootChannelId = getLootChannel(interaction.guildId);
-      const lootChannelText = lootChannelId ? `<#${lootChannelId}>` : "_not set (uses the party's own channel)_";
+      const lootChannelText = lootChannelId
+        ? `<#${lootChannelId}>`
+        : t(interaction.guildId, "config.view.lootChannelUnset");
 
       const customComp = getDefaultPartyComp(interaction.guildId);
       const compText = customComp
-        ? `${formatComp(customComp)} _(custom)_`
-        : `${formatComp(FACTORY_DEFAULT_ROLE_CAPS)} _(built-in default)_`;
+        ? t(interaction.guildId, "config.view.compCustom", { comp: formatComp(customComp) })
+        : t(interaction.guildId, "config.view.compBuiltIn", { comp: formatComp(FACTORY_DEFAULT_ROLE_CAPS) });
+
+      const locale = getLocale(interaction.guildId);
+      const languageText = t(
+        interaction.guildId,
+        locale === "id" ? "config.language.indonesian" : "config.language.english"
+      );
 
       return interaction.reply({
-        content: `**Server settings:**\nLoot channel: ${lootChannelText}\nDefault party: ${compText}`,
+        content: t(interaction.guildId, "config.view.summary", {
+          lootChannel: lootChannelText,
+          comp: compText,
+          language: languageText,
+        }),
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    if (sub === "language") {
+      const locale = interaction.options.getString("language");
+      setLocale(interaction.guildId, locale);
+      const languageText = t(
+        interaction.guildId,
+        locale === "id" ? "config.language.indonesian" : "config.language.english"
+      );
+      return interaction.reply({
+        content: t(interaction.guildId, "config.language.confirm", { language: languageText }),
         flags: MessageFlags.Ephemeral,
       });
     }

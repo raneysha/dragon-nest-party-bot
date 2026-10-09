@@ -1,115 +1,53 @@
 const { SlashCommandBuilder, MessageFlags } = require("discord.js");
-const {
-  createParty,
-  getAllParties,
-  rekeyParty,
-  FACTORY_DEFAULT_ROLE_CAPS,
-} = require("../handlers/partyManager");
+const { createParty, getAllParties, rekeyParty, FACTORY_DEFAULT_ROLE_CAPS } = require("../handlers/partyManager");
 const { buildPartyEmbed, buildPartyButtons } = require("../handlers/uiBuilders");
 const { getDefaultPartyComp } = require("../handlers/guildConfigManager");
+const { t } = require("../i18n");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("party")
-    .setDescription("Organize an MMORPG party or raid group")
+    .setDescription("Organize a party/raid")
     .addSubcommand((sub) =>
       sub
         .setName("create")
-        .setDescription("Start a new party listing")
+        .setDescription("Create a new party listing")
+        .addStringOption((opt) => opt.setName("activity").setDescription("What you're running").setRequired(true))
+        .addStringOption((opt) => opt.setName("time").setDescription("When it's happening, e.g. '8 PM server time'"))
+        .addStringOption((opt) => opt.setName("note").setDescription("Any extra info, e.g. min item level"))
         .addStringOption((opt) =>
-          opt
-            .setName("activity")
-            .setDescription("What you're doing, e.g. 'Molten Core Raid'")
-            .setRequired(true)
+          opt.setName("nest_type").setDescription("Nest type, e.g. 'Elite' or 'Hard Mode'")
         )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("paladins")
-            .setDescription("Paladin slots needed (uses server default if blank)")
-            .setMinValue(0)
-            .setMaxValue(10)
-        )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("healers")
-            .setDescription("Healer slots needed (uses server default if blank)")
-            .setMinValue(0)
-            .setMaxValue(10)
-        )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("swordmasters")
-            .setDescription("Swordmaster (SM) slots needed (uses server default if blank)")
-            .setMinValue(0)
-            .setMaxValue(10)
-        )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("mercenaries")
-            .setDescription("Mercenary (Merc) slots needed (uses server default if blank)")
-            .setMinValue(0)
-            .setMaxValue(10)
-        )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("sorceresses")
-            .setDescription("Sorceress slots needed (uses server default if blank)")
-            .setMinValue(0)
-            .setMaxValue(10)
-        )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("acrobats")
-            .setDescription("Acrobat slots needed (uses server default if blank)")
-            .setMinValue(0)
-            .setMaxValue(10)
-        )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("flexible")
-            .setDescription("Flexible (DPS) slots needed (uses server default if blank)")
-            .setMinValue(0)
-            .setMaxValue(20)
-        )
-        .addStringOption((opt) =>
-          opt.setName("time").setDescription("When you're running it, e.g. 'Tonight 8pm EST'")
-        )
-        .addStringOption((opt) =>
-          opt.setName("note").setDescription("Any extra info, e.g. min item level")
-        )
-        .addStringOption((opt) =>
-          opt.setName("nest_type").setDescription("Jenis Nest, misalnya 'Elite' atau 'Hard Mode'")
-        )
+        .addIntegerOption((opt) => opt.setName("paladins").setDescription("Paladin slots (defaults to server config)").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("healers").setDescription("Healer slots (defaults to server config)").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("swordmasters").setDescription("Swordmaster slots (defaults to server config)").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("mercenaries").setDescription("Mercenary slots (defaults to server config)").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("sorceresses").setDescription("Sorceress slots (defaults to server config)").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("acrobats").setDescription("Acrobat slots (defaults to server config)").setMinValue(0))
+        .addIntegerOption((opt) => opt.setName("flexible").setDescription("Flexible slots (defaults to server config)").setMinValue(0))
     )
-    .addSubcommand((sub) =>
-      sub.setName("list").setDescription("Show all active parties on this server")
-    )
+    .addSubcommand((sub) => sub.setName("list").setDescription("List active parties in this channel"))
     .addSubcommand((sub) =>
       sub
         .setName("recall")
-        .setDescription("Repost a party's listing so it's not buried in chat")
-        .addStringOption((opt) =>
-          opt
-            .setName("activity")
-            .setDescription("Which party to recall (only needed if more than one is active)")
-        )
+        .setDescription("Repost a party listing at the bottom of the channel")
+        .addStringOption((opt) => opt.setName("activity").setDescription("Which party (matches by name)"))
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
 
     if (sub === "create") {
-      const activity = interaction.options.getString("activity");
+      const activity = interaction.options.getString("activity").trim();
       const time = interaction.options.getString("time");
       const note = interaction.options.getString("note");
       const nestType = interaction.options.getString("nest_type");
 
-      // If the user specified ANY role slot, treat this as a custom
-      // composition: only the roles they typed go into the party, and
-      // everything else they left blank is 0 — no default fallback.
-      // Only when they specify NO roles at all do we fall back to this
-      // server's custom default (if an admin set one via /config), or
-      // the bot's built-in factory default.
+      // If the admin typed ANY role option, treat this as a fully custom
+      // composition for this one party — every role not explicitly typed
+      // is treated as 0, not "use the server default." Otherwise (nothing
+      // typed at all), fall back to this server's configured default, or
+      // the bot's built-in default if the server hasn't set one.
       const typedRoleCaps = {
         tank: interaction.options.getInteger("paladins"),
         healer: interaction.options.getInteger("healers"),
@@ -119,35 +57,24 @@ module.exports = {
         acrobat: interaction.options.getInteger("acrobats"),
         flexible: interaction.options.getInteger("flexible"),
       };
-
       const anyRoleTyped = Object.values(typedRoleCaps).some((v) => v !== null);
 
-      let roleCaps;
-      if (anyRoleTyped) {
-        roleCaps = {
-          tank: typedRoleCaps.tank ?? 0,
-          healer: typedRoleCaps.healer ?? 0,
-          swordmaster: typedRoleCaps.swordmaster ?? 0,
-          mercenary: typedRoleCaps.mercenary ?? 0,
-          sorceress: typedRoleCaps.sorceress ?? 0,
-          acrobat: typedRoleCaps.acrobat ?? 0,
-          flexible: typedRoleCaps.flexible ?? 0,
-        };
-      } else {
-        const serverDefaults = getDefaultPartyComp(interaction.guildId) ?? FACTORY_DEFAULT_ROLE_CAPS;
-        roleCaps = { ...serverDefaults };
-      }
+      const roleCaps = anyRoleTyped
+        ? Object.fromEntries(Object.entries(typedRoleCaps).map(([k, v]) => [k, v ?? 0]))
+        : getDefaultPartyComp(interaction.guildId) ?? FACTORY_DEFAULT_ROLE_CAPS;
 
       if (Object.values(roleCaps).every((c) => c === 0)) {
         return interaction.reply({
-          content:
-            "You need at least one open role slot (paladins, healers, swordmasters, mercenaries, sorceresses, acrobats, or flexible) to create a party.",
+          content: t(interaction.guildId, "party.create.needsRole"),
           flags: MessageFlags.Ephemeral,
         });
       }
 
       // Reply first to get a message we can attach the real embed to
-      const reply = await interaction.reply({ content: "Creating party...", fetchReply: true });
+      const reply = await interaction.reply({
+        content: t(interaction.guildId, "party.create.creating"),
+        fetchReply: true,
+      });
 
       const party = createParty({
         messageId: reply.id,
@@ -162,8 +89,8 @@ module.exports = {
 
       await interaction.editReply({
         content: null,
-        embeds: [buildPartyEmbed(party)],
-        components: buildPartyButtons(party),
+        embeds: [buildPartyEmbed(party, interaction.guildId)],
+        components: buildPartyButtons(party, interaction.guildId),
       });
       return;
     }
@@ -172,15 +99,19 @@ module.exports = {
       const active = getAllParties().filter((p) => p.channelId === interaction.channelId);
       if (active.length === 0) {
         return interaction.reply({
-          content: "No active parties in this channel right now. Start one with `/party create`.",
+          content: t(interaction.guildId, "party.list.empty"),
           flags: MessageFlags.Ephemeral,
         });
       }
-      const lines = active.map(
-        (p) => `• **${p.activity}**${p.time ? ` — ${p.time}` : ""} (led by <@${p.leaderId}>)`
+      const lines = active.map((p) =>
+        t(interaction.guildId, "party.list.line", {
+          activity: p.activity,
+          time: p.time ? ` — ${p.time}` : "",
+          leaderId: p.leaderId,
+        })
       );
       return interaction.reply({
-        content: `**Active parties:**\n${lines.join("\n")}`,
+        content: t(interaction.guildId, "party.list.header", { lines: lines.join("\n") }),
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -191,7 +122,7 @@ module.exports = {
 
       if (activeInChannel.length === 0) {
         return interaction.reply({
-          content: "No active parties in this channel to recall.",
+          content: t(interaction.guildId, "party.recall.empty"),
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -204,14 +135,14 @@ module.exports = {
         if (matches.length === 0) {
           const names = activeInChannel.map((p) => `• ${p.activity}`).join("\n");
           return interaction.reply({
-            content: `No active party matches "${query}". Active parties here:\n${names}`,
+            content: t(interaction.guildId, "party.recall.noMatch", { query, names }),
             flags: MessageFlags.Ephemeral,
           });
         }
         if (matches.length > 1) {
           const names = matches.map((p) => `• ${p.activity}`).join("\n");
           return interaction.reply({
-            content: `More than one party matches "${query}" — be more specific:\n${names}`,
+            content: t(interaction.guildId, "party.recall.multiMatch", { query, names }),
             flags: MessageFlags.Ephemeral,
           });
         }
@@ -220,7 +151,7 @@ module.exports = {
         if (activeInChannel.length > 1) {
           const names = activeInChannel.map((p) => `• ${p.activity}`).join("\n");
           return interaction.reply({
-            content: `There's more than one active party here — specify which with \`/party recall activity:\`\n${names}`,
+            content: t(interaction.guildId, "party.recall.needsQuery", { names }),
             flags: MessageFlags.Ephemeral,
           });
         }
@@ -236,13 +167,16 @@ module.exports = {
         // ignore — old message may already be deleted
       }
 
-      const reply = await interaction.reply({ content: "Recalling party...", fetchReply: true });
+      const reply = await interaction.reply({
+        content: t(interaction.guildId, "party.recall.recalling"),
+        fetchReply: true,
+      });
       const party = rekeyParty(target.messageId, reply.id);
 
       await interaction.editReply({
         content: null,
-        embeds: [buildPartyEmbed(party)],
-        components: buildPartyButtons(party),
+        embeds: [buildPartyEmbed(party, interaction.guildId)],
+        components: buildPartyButtons(party, interaction.guildId),
       });
       return;
     }

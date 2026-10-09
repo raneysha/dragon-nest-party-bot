@@ -4,12 +4,12 @@ const { buildPartyEmbed, buildPartyButtons } = require("../uiBuilders");
 // Needed when the update comes from an ephemeral message (the subclass
 // picker, assign flow, kick flow, etc.) rather than a direct interaction
 // on the party message itself.
-async function refreshPartyMessage(client, party) {
+async function refreshPartyMessage(client, party, guildId) {
   const channel = await client.channels.fetch(party.channelId);
   const message = await channel.messages.fetch(party.messageId);
   await message.edit({
-    embeds: [buildPartyEmbed(party)],
-    components: buildPartyButtons(party),
+    embeds: [buildPartyEmbed(party, guildId)],
+    components: buildPartyButtons(party, guildId),
   });
 }
 

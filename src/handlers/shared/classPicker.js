@@ -1,6 +1,7 @@
 const { StringSelectMenuBuilder, ActionRowBuilder, MessageFlags } = require("discord.js");
 const { ROLE_LABELS } = require("../partyManager");
 const { getSubclasses } = require("../roleClasses");
+const { t } = require("../../i18n");
 
 // Splits an array into chunks of at most `size` items — used so a class
 // list longer than Discord's 25-option select menu limit still works, by
@@ -14,7 +15,7 @@ function chunkArray(arr, size) {
 // Builds an ephemeral "choose your class" prompt using a dropdown
 // (StringSelectMenu) instead of a row of buttons. Used when a player joins
 // a role directly (party:join) that has subclasses defined.
-function buildSubclassPrompt(messageId, roleKey) {
+function buildSubclassPrompt(messageId, roleKey, guildId) {
   const subclasses = getSubclasses(roleKey);
   const chunks = chunkArray(subclasses, 25); // Discord's hard cap per select menu
 
@@ -23,15 +24,15 @@ function buildSubclassPrompt(messageId, roleKey) {
       .setCustomId(`party:pickclass:${messageId}:${roleKey}:${i}`)
       .setPlaceholder(
         chunks.length > 1
-          ? `Choose your class (${i + 1}/${chunks.length})`
-          : `Choose your ${ROLE_LABELS[roleKey]} class`
+          ? t(guildId, "party.classPicker.placeholderMulti", { page: i + 1, total: chunks.length })
+          : t(guildId, "party.classPicker.placeholderSingle", { role: ROLE_LABELS[roleKey] })
       )
       .addOptions(chunk.map((subclass) => ({ label: subclass, value: subclass })));
     return new ActionRowBuilder().addComponents(menu);
   });
 
   return {
-    content: `Choose your ${ROLE_LABELS[roleKey]} class:`,
+    content: t(guildId, "party.classPicker.prompt", { role: ROLE_LABELS[roleKey] }),
     components: rows,
     flags: MessageFlags.Ephemeral,
   };

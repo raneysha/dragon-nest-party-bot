@@ -11,6 +11,7 @@ const { hasSubclasses, getSubclasses } = require("../roleClasses");
 const { isLeaderOrAdmin } = require("../shared/permissions");
 const { chunkArray } = require("../shared/classPicker");
 const { refreshPartyMessage } = require("./partyMessages");
+const { t } = require("../../i18n");
 
 // Step 1 of Assign: leader/admin picked a role, now pick who fills it.
 // customId format: party:assignrole:<messageId>
@@ -19,11 +20,11 @@ async function handleAssignRole(interaction, parts) {
   const party = getParty(messageId);
 
   if (!party) {
-    return interaction.update({ content: "This party no longer exists.", components: [] });
+    return interaction.update({ content: t(interaction.guildId, "common.partyGone"), components: [] });
   }
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.update({
-      content: "Only the party leader or a server admin can assign members to a role.",
+      content: t(interaction.guildId, "party.assign.denied"),
       components: [],
     });
   }
@@ -32,17 +33,17 @@ async function handleAssignRole(interaction, parts) {
   const role = party.roles[roleKey];
   if (!role || role.members.length >= role.cap) {
     return interaction.update({
-      content: "That role just filled up — try a different one.",
+      content: t(interaction.guildId, "party.assign.roleJustFilled"),
       components: [],
     });
   }
 
   const userMenu = new UserSelectMenuBuilder()
     .setCustomId(`party:assignuser:${messageId}:${roleKey}`)
-    .setPlaceholder(`Who should fill ${ROLE_LABELS[roleKey]}?`);
+    .setPlaceholder(t(interaction.guildId, "party.assign.userPlaceholder", { role: ROLE_LABELS[roleKey] }));
 
   return interaction.update({
-    content: `Pick who to assign to **${ROLE_LABELS[roleKey]}**:`,
+    content: t(interaction.guildId, "party.assign.userPrompt", { role: ROLE_LABELS[roleKey] }),
     components: [new ActionRowBuilder().addComponents(userMenu)],
   });
 }
@@ -55,11 +56,11 @@ async function handleAssignUser(interaction, parts) {
   const party = getParty(messageId);
 
   if (!party) {
-    return interaction.update({ content: "This party no longer exists.", components: [] });
+    return interaction.update({ content: t(interaction.guildId, "common.partyGone"), components: [] });
   }
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.update({
-      content: "Only the party leader or a server admin can assign members to a role.",
+      content: t(interaction.guildId, "party.assign.denied"),
       components: [],
     });
   }
@@ -67,7 +68,7 @@ async function handleAssignUser(interaction, parts) {
   const role = party.roles[roleKey];
   if (!role || role.members.length >= role.cap) {
     return interaction.update({
-      content: "That role just filled up — try a different one.",
+      content: t(interaction.guildId, "party.assign.roleJustFilled"),
       components: [],
     });
   }
@@ -84,15 +85,22 @@ async function handleAssignUser(interaction, parts) {
         .setCustomId(`party:assignclass:${messageId}:${roleKey}:${targetUserId}:${i}`)
         .setPlaceholder(
           chunks.length > 1
-            ? `Class for ${targetUsername} (${i + 1}/${chunks.length})`
-            : `Which class for ${targetUsername}?`
+            ? t(interaction.guildId, "party.assign.classPromptMulti", {
+                username: targetUsername,
+                page: i + 1,
+                total: chunks.length,
+              })
+            : t(interaction.guildId, "party.assign.classPromptSingle", { username: targetUsername })
         )
         .addOptions(chunk.map((subclass) => ({ label: subclass, value: subclass })));
       return new ActionRowBuilder().addComponents(menu);
     });
 
     return interaction.update({
-      content: `Which class should <@${targetUserId}> be assigned as ${ROLE_LABELS[roleKey]}?`,
+      content: t(interaction.guildId, "party.assign.classQuestion", {
+        userId: targetUserId,
+        role: ROLE_LABELS[roleKey],
+      }),
       components: rows,
     });
   }
@@ -100,14 +108,17 @@ async function handleAssignUser(interaction, parts) {
   const result = joinRole(messageId, targetUserId, roleKey);
   if (result === "full") {
     return interaction.update({
-      content: "That role just filled up — try a different one.",
+      content: t(interaction.guildId, "party.assign.roleJustFilled"),
       components: [],
     });
   }
 
-  await refreshPartyMessage(interaction.client, party);
+  await refreshPartyMessage(interaction.client, party, interaction.guildId);
   return interaction.update({
-    content: `Assigned <@${targetUserId}> to ${ROLE_LABELS[roleKey]}.`,
+    content: t(interaction.guildId, "party.assign.confirmNoClass", {
+      userId: targetUserId,
+      role: ROLE_LABELS[roleKey],
+    }),
     components: [],
   });
 }
@@ -120,11 +131,11 @@ async function handleAssignClass(interaction, parts) {
   const party = getParty(messageId);
 
   if (!party) {
-    return interaction.update({ content: "This party no longer exists.", components: [] });
+    return interaction.update({ content: t(interaction.guildId, "common.partyGone"), components: [] });
   }
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.update({
-      content: "Only the party leader or a server admin can assign members to a role.",
+      content: t(interaction.guildId, "party.assign.denied"),
       components: [],
     });
   }
@@ -133,14 +144,18 @@ async function handleAssignClass(interaction, parts) {
   const result = joinRole(messageId, targetUserId, roleKey, subclass);
   if (result === "full") {
     return interaction.update({
-      content: "That role just filled up — try a different one.",
+      content: t(interaction.guildId, "party.assign.roleJustFilled"),
       components: [],
     });
   }
 
-  await refreshPartyMessage(interaction.client, party);
+  await refreshPartyMessage(interaction.client, party, interaction.guildId);
   return interaction.update({
-    content: `Assigned <@${targetUserId}> as **${subclass}** ${ROLE_LABELS[roleKey]}.`,
+    content: t(interaction.guildId, "party.assign.confirmWithClass", {
+      userId: targetUserId,
+      subclass,
+      role: ROLE_LABELS[roleKey],
+    }),
     components: [],
   });
 }
@@ -152,11 +167,11 @@ async function handleKickSelect(interaction, parts) {
   const party = getParty(messageId);
 
   if (!party) {
-    return interaction.update({ content: "This party no longer exists.", components: [] });
+    return interaction.update({ content: t(interaction.guildId, "common.partyGone"), components: [] });
   }
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.update({
-      content: "Only the party leader or a server admin can kick members.",
+      content: t(interaction.guildId, "party.kick.denied"),
       components: [],
     });
   }
@@ -165,14 +180,14 @@ async function handleKickSelect(interaction, parts) {
   const removed = removeMember(messageId, kickedId);
   if (!removed) {
     return interaction.update({
-      content: "That member already left the party.",
+      content: t(interaction.guildId, "party.kick.alreadyLeft"),
       components: [],
     });
   }
 
-  await refreshPartyMessage(interaction.client, party);
+  await refreshPartyMessage(interaction.client, party, interaction.guildId);
   return interaction.update({
-    content: `Kicked <@${kickedId}> from the party.`,
+    content: t(interaction.guildId, "party.kick.confirm", { userId: kickedId }),
     components: [],
   });
 }
@@ -186,32 +201,32 @@ async function handleFinishHolder(interaction, parts) {
 
   const party = getParty(messageId);
   if (!party) {
-    return interaction.update({ content: "This party no longer exists.", components: [] });
+    return interaction.update({ content: t(interaction.guildId, "common.partyGone"), components: [] });
   }
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.update({
-      content: "Only the party leader or a server admin can finish this party.",
+      content: t(interaction.guildId, "party.finish.denied"),
       components: [],
     });
   }
 
   const modal = new ModalBuilder()
     .setCustomId(`party:finishmodal:${messageId}:${lootHolderId}`)
-    .setTitle("Finish party");
+    .setTitle(t(interaction.guildId, "party.finish.modalTitle"));
 
   const lootListInput = new TextInputBuilder()
     .setCustomId("loot_list")
-    .setLabel("Lootnya apa aja?")
+    .setLabel(t(interaction.guildId, "party.finish.lootListLabel"))
     .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder("Satu item per baris")
+    .setPlaceholder(t(interaction.guildId, "party.finish.lootListPlaceholder"))
     .setMaxLength(500)
     .setRequired(true);
 
   const dateInput = new TextInputBuilder()
     .setCustomId("date_cleared")
-    .setLabel("Tanggal clear")
+    .setLabel(t(interaction.guildId, "party.finish.dateLabel"))
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder("e.g. 10/07/2026")
+    .setPlaceholder(t(interaction.guildId, "party.finish.datePlaceholder"))
     .setMaxLength(30)
     .setRequired(true);
 
@@ -232,7 +247,7 @@ async function handlePickClass(interaction, parts) {
   const party = getParty(messageId);
   if (!party) {
     return interaction.update({
-      content: "This party no longer exists.",
+      content: t(interaction.guildId, "common.partyGone"),
       components: [],
     });
   }
@@ -240,14 +255,17 @@ async function handlePickClass(interaction, parts) {
   const result = joinRole(messageId, interaction.user.id, roleKey, subclass);
   if (result === "full") {
     return interaction.update({
-      content: "That role just filled up — try another one!",
+      content: t(interaction.guildId, "party.pickclass.roleFull"),
       components: [],
     });
   }
 
-  await refreshPartyMessage(interaction.client, party);
+  await refreshPartyMessage(interaction.client, party, interaction.guildId);
   return interaction.update({
-    content: `Joined as **${subclass}** ${ROLE_LABELS[roleKey]}!`,
+    content: t(interaction.guildId, "party.pickclass.confirm", {
+      subclass,
+      role: ROLE_LABELS[roleKey],
+    }),
     components: [],
   });
 }

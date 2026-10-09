@@ -1,6 +1,7 @@
 const { MessageFlags } = require("discord.js");
 const { getLoot, markSold, markStamp } = require("../lootManager");
 const { buildLootRecapEmbed, buildLootButtons, isLootHolder } = require("./lootUiBuilders");
+const { t } = require("../../i18n");
 
 async function handleSoldPrice(interaction, parts) {
   const [, , recapMessageId, indexStr] = parts;
@@ -10,14 +11,14 @@ async function handleSoldPrice(interaction, parts) {
   const existingRecord = getLoot(recapMessageId);
   if (!existingRecord) {
     return interaction.reply({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.sold.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!isLootHolder(interaction, existingRecord)) {
     return interaction.reply({
-      content: `Hanya **<@${existingRecord.lootHolder}>** (pembawa loot) yang bisa menandai item terjual.`,
+      content: t(interaction.guildId, "loot.sold.notHolder", { lootHolder: existingRecord.lootHolder }),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -25,7 +26,7 @@ async function handleSoldPrice(interaction, parts) {
   const record = markSold(recapMessageId, index, interaction.user.id, harga);
   if (!record) {
     return interaction.reply({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.sold.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -33,15 +34,15 @@ async function handleSoldPrice(interaction, parts) {
   try {
     const recapMessage = await interaction.channel.messages.fetch(recapMessageId);
     await recapMessage.edit({
-      embeds: [buildLootRecapEmbed(record)],
-      components: buildLootButtons(recapMessageId, record),
+      embeds: [buildLootRecapEmbed(record, interaction.guildId)],
+      components: buildLootButtons(recapMessageId, record, interaction.guildId),
     });
   } catch (err) {
     // Recap message may have been deleted — not fatal, the sale is still recorded.
   }
 
   return interaction.reply({
-    content: `✅ Ditandai terjual: **${record.items[index].name}** — ${harga}`,
+    content: t(interaction.guildId, "loot.sold.confirm", { item: record.items[index].name, price: harga }),
     flags: MessageFlags.Ephemeral,
   });
 }
@@ -54,7 +55,7 @@ async function handleStampModal(interaction, parts) {
 
   if (!Number.isFinite(stampValue)) {
     return interaction.reply({
-      content: `"${stampRaw}" bukan angka yang valid. Coba lagi dengan angka saja, misal 5.`,
+      content: t(interaction.guildId, "loot.stamp.notANumber", { raw: stampRaw }),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -62,14 +63,14 @@ async function handleStampModal(interaction, parts) {
   const existingRecord = getLoot(recapMessageId);
   if (!existingRecord) {
     return interaction.reply({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.stamp.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!isLootHolder(interaction, existingRecord)) {
     return interaction.reply({
-      content: `Hanya **<@${existingRecord.lootHolder}>** (pembawa loot) yang bisa mengisi STAMP.`,
+      content: t(interaction.guildId, "loot.stamp.notHolder", { lootHolder: existingRecord.lootHolder }),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -77,20 +78,20 @@ async function handleStampModal(interaction, parts) {
   const record = markStamp(recapMessageId, index, stampValue);
   if (!record) {
     return interaction.reply({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.stamp.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   try {
     const recapMessage = await interaction.channel.messages.fetch(recapMessageId);
-    await recapMessage.edit({ embeds: [buildLootRecapEmbed(record)] });
+    await recapMessage.edit({ embeds: [buildLootRecapEmbed(record, interaction.guildId)] });
   } catch (err) {
     // Recap message may have been deleted — not fatal, the stamp is still recorded.
   }
 
   return interaction.reply({
-    content: `🎟️ STAMP untuk <@${record.roster[index].userId}> diset ke **${stampValue}**.`,
+    content: t(interaction.guildId, "loot.stamp.confirm", { userId: record.roster[index].userId, value: stampValue }),
     flags: MessageFlags.Ephemeral,
   });
 }

@@ -1,20 +1,21 @@
 const { MessageFlags, StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require("discord.js");
 const { getLoot, deleteLoot } = require("../lootManager");
 const { isLootHolder, allItemsSold } = require("./lootUiBuilders");
+const { t } = require("../../i18n");
 
 async function handleSoldBtn(interaction, parts) {
   const recapMessageId = parts[2];
   const record = getLoot(recapMessageId);
   if (!record) {
     return interaction.reply({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.sold.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!isLootHolder(interaction, record)) {
     return interaction.reply({
-      content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa menandai item terjual.`,
+      content: t(interaction.guildId, "loot.sold.notHolder", { lootHolder: record.lootHolder }),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -25,18 +26,18 @@ async function handleSoldBtn(interaction, parts) {
 
   if (unsoldOptions.length === 0) {
     return interaction.reply({
-      content: "Semua item sudah ditandai terjual.",
+      content: t(interaction.guildId, "loot.sold.allSold"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`party:soldselect:${recapMessageId}`)
-    .setPlaceholder("Pilih item yang sudah terjual")
+    .setPlaceholder(t(interaction.guildId, "loot.sold.placeholder"))
     .addOptions(unsoldOptions.slice(0, 25)); // Discord select menus cap at 25 options
 
   return interaction.reply({
-    content: "Item mana yang sudah terjual?",
+    content: t(interaction.guildId, "loot.sold.prompt"),
     components: [new ActionRowBuilder().addComponents(menu)],
     flags: MessageFlags.Ephemeral,
   });
@@ -47,21 +48,21 @@ async function handleGajiBtn(interaction, parts) {
   const record = getLoot(recapMessageId);
   if (!record) {
     return interaction.reply({
-      content: "Data party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.gaji.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!isLootHolder(interaction, record)) {
     return interaction.reply({
-      content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa menandai gaji.`,
+      content: t(interaction.guildId, "loot.gaji.notHolder", { lootHolder: record.lootHolder }),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!allItemsSold(record)) {
     return interaction.reply({
-      content: "Semua item harus terjual dulu sebelum gaji bisa ditandai.",
+      content: t(interaction.guildId, "loot.gaji.notAllSold"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -72,7 +73,7 @@ async function handleGajiBtn(interaction, parts) {
 
   if (unpaidEntries.length === 0) {
     return interaction.reply({
-      content: "Semua member sudah menerima gaji.",
+      content: t(interaction.guildId, "loot.gaji.allPaid"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -91,11 +92,11 @@ async function handleGajiBtn(interaction, parts) {
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`party:gajiselect:${recapMessageId}`)
-    .setPlaceholder("Pilih member yang sudah digaji")
+    .setPlaceholder(t(interaction.guildId, "loot.gaji.placeholder"))
     .addOptions(options); // already capped at 25 above
 
   return interaction.reply({
-    content: "Member mana yang sudah menerima gaji?",
+    content: t(interaction.guildId, "loot.gaji.prompt"),
     components: [new ActionRowBuilder().addComponents(menu)],
     flags: MessageFlags.Ephemeral,
   });
@@ -106,21 +107,21 @@ async function handleStampBtn(interaction, parts) {
   const record = getLoot(recapMessageId);
   if (!record) {
     return interaction.reply({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.stamp.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!isLootHolder(interaction, record)) {
     return interaction.reply({
-      content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa mengisi STAMP.`,
+      content: t(interaction.guildId, "loot.stamp.notHolder", { lootHolder: record.lootHolder }),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!record.roster || record.roster.length === 0) {
     return interaction.reply({
-      content: "Tidak ada member di roster party ini.",
+      content: t(interaction.guildId, "loot.stamp.noRoster"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -141,11 +142,11 @@ async function handleStampBtn(interaction, parts) {
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`party:stampselect:${recapMessageId}`)
-    .setPlaceholder("Pilih member")
+    .setPlaceholder(t(interaction.guildId, "loot.stamp.placeholder"))
     .addOptions(options.slice(0, 25)); // Discord select menus cap at 25 options
 
   return interaction.reply({
-    content: "Isi STAMP untuk member mana?",
+    content: t(interaction.guildId, "loot.stamp.prompt"),
     components: [new ActionRowBuilder().addComponents(menu)],
     flags: MessageFlags.Ephemeral,
   });
@@ -156,14 +157,14 @@ async function handleDeleteLootBtn(interaction, parts) {
   const record = getLoot(recapMessageId);
   if (!record) {
     return interaction.reply({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.delete.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
     return interaction.reply({
-      content: "Hanya server admin yang bisa menghapus loot thread ini.",
+      content: t(interaction.guildId, "loot.delete.adminOnly"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -171,17 +172,17 @@ async function handleDeleteLootBtn(interaction, parts) {
   const confirmRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`party:deletelootconfirm:yes:${recapMessageId}`)
-      .setLabel("Ya, hapus thread")
+      .setLabel(t(interaction.guildId, "loot.delete.confirmYes"))
       .setEmoji("🗑️")
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId(`party:deletelootconfirm:no:${recapMessageId}`)
-      .setLabel("Batal")
+      .setLabel(t(interaction.guildId, "loot.delete.confirmNo"))
       .setStyle(ButtonStyle.Secondary)
   );
 
   return interaction.reply({
-    content: "⚠️ Yakin mau hapus thread loot ini? Aksi ini tidak bisa dibatalkan.",
+    content: t(interaction.guildId, "loot.delete.confirmPrompt"),
     components: [confirmRow],
     flags: MessageFlags.Ephemeral,
   });
@@ -194,21 +195,21 @@ async function handleDeleteLootConfirm(interaction, parts) {
 
   if (!record) {
     return interaction.update({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.delete.recordGone"),
       components: [],
     });
   }
 
   if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
     return interaction.update({
-      content: "Hanya server admin yang bisa menghapus loot thread ini.",
+      content: t(interaction.guildId, "loot.delete.adminOnly"),
       components: [],
     });
   }
 
   if (choice === "no") {
     return interaction.update({
-      content: "👍 Dibatalkan — thread tidak dihapus.",
+      content: t(interaction.guildId, "loot.delete.cancelled"),
       components: [],
     });
   }
@@ -216,7 +217,7 @@ async function handleDeleteLootConfirm(interaction, parts) {
   // Acknowledge first, then delete — once the thread is gone, there's
   // no channel left to send a response into.
   await interaction.update({
-    content: "🗑️ Menghapus thread...",
+    content: t(interaction.guildId, "loot.delete.deleting"),
     components: [],
   });
 
@@ -230,7 +231,7 @@ async function handleDeleteLootConfirm(interaction, parts) {
     // Can't send a normal reply since we already used update() above —
     // follow up instead so the admin still sees the failure.
     await interaction.followUp({
-      content: "Data loot sudah dihapus, tapi gagal menghapus thread — cek permission bot (Manage Threads).",
+      content: t(interaction.guildId, "loot.delete.failed"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -242,14 +243,14 @@ async function handleChangeHolderBtn(interaction, parts) {
   const record = getLoot(recapMessageId);
   if (!record) {
     return interaction.reply({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.changeHolder.recordGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (interaction.user.id !== record.leaderId) {
     return interaction.reply({
-      content: "Hanya party leader yang bisa mengubah pembawa loot.",
+      content: t(interaction.guildId, "loot.changeHolder.leaderOnly"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -263,24 +264,27 @@ async function handleChangeHolderBtn(interaction, parts) {
     } catch (err) {
       // If the fetch fails for some reason, fall back to showing the raw ID.
     }
-    const label = entry.userId === record.lootHolder ? `⭐ ${username} (saat ini)` : username;
+    const label =
+      entry.userId === record.lootHolder
+        ? t(interaction.guildId, "loot.changeHolder.currentTag", { username })
+        : username;
     options.push({ label: label.slice(0, 100), value: entry.userId });
   }
 
   if (options.length === 0) {
     return interaction.reply({
-      content: "Tidak ada member di roster party ini.",
+      content: t(interaction.guildId, "loot.changeHolder.noRoster"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`party:changeholderselect:${recapMessageId}`)
-    .setPlaceholder("Pilih pembawa loot baru")
+    .setPlaceholder(t(interaction.guildId, "loot.changeHolder.placeholder"))
     .addOptions(options.slice(0, 25)); // Discord select menus cap at 25 options
 
   return interaction.reply({
-    content: "Siapa pembawa loot yang baru?",
+    content: t(interaction.guildId, "loot.changeHolder.prompt"),
     components: [new ActionRowBuilder().addComponents(menu)],
     flags: MessageFlags.Ephemeral,
   });

@@ -1,22 +1,17 @@
 const { SlashCommandBuilder, MessageFlags, EmbedBuilder } = require("discord.js");
 const { addCharacter, removeCharacter, getCharacters } = require("../handlers/characterManager");
 const { getAllClassNames } = require("../handlers/roleClasses");
+const { t } = require("../i18n");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("character")
-    .setDescription("Register and view MMORPG characters")
+    .setDescription("Manage your registered characters")
     .addSubcommand((sub) =>
       sub
         .setName("add")
-        .setDescription("Register one of your characters")
-        .addStringOption((opt) =>
-          opt
-            .setName("ign")
-            .setDescription("Your character's in-game name")
-            .setRequired(true)
-            .setMaxLength(32)
-        )
+        .setDescription("Register a character")
+        .addStringOption((opt) => opt.setName("ign").setDescription("Your character's in-game name").setRequired(true))
         .addStringOption((opt) =>
           opt
             .setName("class")
@@ -28,10 +23,8 @@ module.exports = {
     .addSubcommand((sub) =>
       sub
         .setName("list")
-        .setDescription("List registered characters")
-        .addUserOption((opt) =>
-          opt.setName("user").setDescription("Whose characters to list (defaults to you)")
-        )
+        .setDescription("List a user's registered characters")
+        .addUserOption((opt) => opt.setName("user").setDescription("Whose characters to list (defaults to you)"))
     )
     .addSubcommand((sub) =>
       sub
@@ -42,15 +35,12 @@ module.exports = {
         )
     ),
 
-  // Powers the "class" option's search-as-you-type suggestions. Unlike
-  // static addChoices() (capped at 25 total), this searches the full
-  // class list — however long it grows — and only returns the top 25
-  // matches for whatever's currently typed.
   async autocomplete(interaction) {
-    const focused = interaction.options.getFocused().toLowerCase();
+    const focusedValue = interaction.options.getFocused().toLowerCase();
     const matches = getAllClassNames()
-      .filter((name) => name.toLowerCase().includes(focused))
-      .slice(0, 25);
+      .filter((name) => name.toLowerCase().includes(focusedValue))
+      .slice(0, 25); // Discord autocomplete caps at 25 suggestions
+
     await interaction.respond(matches.map((name) => ({ name, value: name })));
   },
 
@@ -61,13 +51,13 @@ module.exports = {
       const ign = interaction.options.getString("ign").trim();
       const className = interaction.options.getString("class");
 
-      // Autocomplete only *suggests* matches as you type — unlike the old
+      // Autocomplete only *suggests* matches as you type — unlike a
       // static choices list, Discord doesn't actually enforce that the
       // submitted value came from a suggestion. Validate it here so a
       // typo or free-typed value doesn't get stored as a "class."
       if (!getAllClassNames().includes(className)) {
         return interaction.reply({
-          content: `**${className}** isn't a recognized class — please pick one from the suggestions as you type.`,
+          content: t(interaction.guildId, "character.add.invalidClass", { className }),
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -75,13 +65,13 @@ module.exports = {
       const result = addCharacter(interaction.user.id, ign, className);
       if (result === "duplicate") {
         return interaction.reply({
-          content: `You already have a character named **${ign}** registered.`,
+          content: t(interaction.guildId, "character.add.duplicate", { ign }),
           flags: MessageFlags.Ephemeral,
         });
       }
 
       return interaction.reply({
-        content: `✅ Registered **${ign}** (${className}).`,
+        content: t(interaction.guildId, "character.add.confirm", { ign, className }),
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -91,19 +81,27 @@ module.exports = {
       const list = getCharacters(targetUser.id);
 
       if (list.length === 0) {
-        const whose = targetUser.id === interaction.user.id ? "You haven't" : `${targetUser.username} hasn't`;
+        const content =
+          targetUser.id === interaction.user.id
+            ? t(interaction.guildId, "character.list.emptySelf")
+            : t(interaction.guildId, "character.list.emptyOther", { username: targetUser.username });
         return interaction.reply({
-          content: `${whose} registered any characters yet.`,
+          content,
           flags: MessageFlags.Ephemeral,
         });
       }
 
       const embed = new EmbedBuilder()
-        .setTitle(`🗡️ ${targetUser.username}'s characters`)
+        .setTitle(t(interaction.guildId, "character.list.title", { username: targetUser.username }))
         .setColor(0x5865f2)
         .setThumbnail(targetUser.displayAvatarURL())
         .setDescription(list.map((c) => `**${c.ign}** — ${c.className}`).join("\n"))
-        .setFooter({ text: `${list.length} character${list.length === 1 ? "" : "s"} registered` });
+        .setFooter({
+          text: t(interaction.guildId, "character.list.footer", {
+            count: list.length,
+            plural: list.length === 1 ? "" : "s",
+          }),
+        });
 
       return interaction.reply({
         embeds: [embed],
@@ -116,13 +114,13 @@ module.exports = {
 
       if (!removed) {
         return interaction.reply({
-          content: `You don't have a character named **${ign}** registered.`,
+          content: t(interaction.guildId, "character.remove.notFound", { ign }),
           flags: MessageFlags.Ephemeral,
         });
       }
 
       return interaction.reply({
-        content: `🗑️ Removed **${ign}**.`,
+        content: t(interaction.guildId, "character.remove.confirm", { ign }),
         flags: MessageFlags.Ephemeral,
       });
     }

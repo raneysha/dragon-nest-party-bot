@@ -1,38 +1,26 @@
-// Persistent per-server bot settings, keyed by Discord guild (server) ID.
-// Backed by a JSON file on disk (data/guildConfig.json) so settings survive
-// a bot restart — same pattern as characterManager.js and lootManager.js.
-// Shape per guild: { lootChannelId, defaultPartyComp }
+const fs = require("fs");
+const path = require("path");
 
-const fs = require("node:fs");
-const path = require("node:path");
+const CONFIG_PATH = path.join(__dirname, "..", "..", "data", "guildConfig.json");
 
-const DATA_DIR = path.join(__dirname, "..", "..", "data");
-const DATA_FILE = path.join(DATA_DIR, "guildConfig.json");
-
-const configs = new Map(); // guildId -> { lootChannelId }
+// Shape per guild: { lootChannelId, defaultPartyComp, locale }
+let configs = new Map();
 
 function loadFromDisk() {
   try {
-    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
     const parsed = JSON.parse(raw);
-    for (const [guildId, config] of Object.entries(parsed)) {
-      configs.set(guildId, config);
-    }
+    configs = new Map(Object.entries(parsed));
   } catch (err) {
-    if (err.code !== "ENOENT") {
-      console.error("Couldn't read guildConfig.json, starting with no saved settings:", err.message);
-    }
+    // File doesn't exist yet or is invalid — start with an empty config set.
+    configs = new Map();
   }
 }
 
 function saveToDisk() {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const asObject = Object.fromEntries(configs);
-    fs.writeFileSync(DATA_FILE, JSON.stringify(asObject, null, 2));
-  } catch (err) {
-    console.error("Couldn't save guildConfig.json:", err.message);
-  }
+  const obj = Object.fromEntries(configs);
+  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(obj, null, 2));
 }
 
 loadFromDisk();
@@ -46,12 +34,13 @@ function setLootChannel(guildId, channelId) {
 
 function clearLootChannel(guildId) {
   const config = configs.get(guildId);
-  if (!config) return;
-  delete config.lootChannelId;
-  saveToDisk();
+  if (config) {
+    delete config.lootChannelId;
+    configs.set(guildId, config);
+    saveToDisk();
+  }
 }
 
-// Returns the configured loot channel ID for a guild, or null if unset.
 function getLootChannel(guildId) {
   return configs.get(guildId)?.lootChannelId ?? null;
 }
@@ -65,9 +54,11 @@ function setDefaultPartyComp(guildId, roleCaps) {
 
 function clearDefaultPartyComp(guildId) {
   const config = configs.get(guildId);
-  if (!config) return;
-  delete config.defaultPartyComp;
-  saveToDisk();
+  if (config) {
+    delete config.defaultPartyComp;
+    configs.set(guildId, config);
+    saveToDisk();
+  }
 }
 
 // Returns the guild's custom default party composition, or null if this
@@ -77,6 +68,22 @@ function getDefaultPartyComp(guildId) {
   return configs.get(guildId)?.defaultPartyComp ?? null;
 }
 
+const SUPPORTED_LOCALES = ["en", "id"];
+const DEFAULT_LOCALE = "en";
+
+function setLocale(guildId, locale) {
+  const config = configs.get(guildId) || {};
+  config.locale = locale;
+  configs.set(guildId, config);
+  saveToDisk();
+}
+
+// Returns the guild's configured bot language ("en" or "id"), defaulting
+// to English if the server hasn't set one via /config language.
+function getLocale(guildId) {
+  return configs.get(guildId)?.locale ?? DEFAULT_LOCALE;
+}
+
 module.exports = {
   setLootChannel,
   clearLootChannel,
@@ -84,4 +91,8 @@ module.exports = {
   setDefaultPartyComp,
   clearDefaultPartyComp,
   getDefaultPartyComp,
+  setLocale,
+  getLocale,
+  SUPPORTED_LOCALES,
+  DEFAULT_LOCALE,
 };

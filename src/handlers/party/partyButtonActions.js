@@ -8,26 +8,27 @@ const {
 } = require("discord.js");
 const { getParty, deleteParty, isMember, getAllMemberIds, ROLE_LABELS } = require("../partyManager");
 const { isLeaderOrAdmin } = require("../shared/permissions");
+const { t } = require("../../i18n");
 
 // Opens a modal for composing a party-wide ping message. Usable by any
 // current party member, or the leader/an admin even if they haven't joined.
 async function handlePing(interaction, party) {
   if (!isMember(party, interaction.user.id) && !isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "You need to join the party before you can ping it.",
+      content: t(interaction.guildId, "party.ping.needToJoin"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   const modal = new ModalBuilder()
     .setCustomId(`party:pingmodal:${party.messageId}`)
-    .setTitle("Ping the party");
+    .setTitle(t(interaction.guildId, "party.ping.modalTitle"));
 
   const messageInput = new TextInputBuilder()
     .setCustomId("message")
-    .setLabel("What do you want to say?")
+    .setLabel(t(interaction.guildId, "party.ping.modalLabel"))
     .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder("e.g. Forming up now, get in voice!")
+    .setPlaceholder(t(interaction.guildId, "party.ping.modalPlaceholder"))
     .setMaxLength(300)
     .setRequired(true);
 
@@ -40,7 +41,7 @@ async function handlePing(interaction, party) {
 async function handleAssign(interaction, party) {
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "Only the party leader or a server admin can assign members to a role.",
+      content: t(interaction.guildId, "party.assign.denied"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -48,24 +49,27 @@ async function handleAssign(interaction, party) {
   const openRoleOptions = Object.entries(party.roles)
     .filter(([, role]) => role.members.length < role.cap)
     .map(([roleKey, role]) => ({
-      label: `${ROLE_LABELS[roleKey]} (${role.cap - role.members.length} open)`,
+      label: t(interaction.guildId, "party.assign.rolePlaceholder", {
+        role: ROLE_LABELS[roleKey],
+        open: role.cap - role.members.length,
+      }),
       value: roleKey,
     }));
 
   if (openRoleOptions.length === 0) {
     return interaction.reply({
-      content: "Every role is already full — there's nothing open to assign someone to.",
+      content: t(interaction.guildId, "party.assign.allFull"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`party:assignrole:${party.messageId}`)
-    .setPlaceholder("Which role do you want to fill?")
+    .setPlaceholder(t(interaction.guildId, "party.assign.roleMenuPlaceholder"))
     .addOptions(openRoleOptions);
 
   return interaction.reply({
-    content: "Which open role do you want to assign someone to?",
+    content: t(interaction.guildId, "party.assign.rolePrompt"),
     components: [new ActionRowBuilder().addComponents(menu)],
     flags: MessageFlags.Ephemeral,
   });
@@ -75,7 +79,7 @@ async function handleAssign(interaction, party) {
 async function handleKick(interaction, party) {
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "Only the party leader or a server admin can kick members.",
+      content: t(interaction.guildId, "party.kick.denied"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -103,18 +107,18 @@ async function handleKick(interaction, party) {
 
   if (options.length === 0) {
     return interaction.reply({
-      content: "There's no one to kick — the party has no members besides you.",
+      content: t(interaction.guildId, "party.kick.nobodyToKick"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`party:kickselect:${party.messageId}`)
-    .setPlaceholder("Choose a member to kick")
+    .setPlaceholder(t(interaction.guildId, "party.kick.placeholder"))
     .addOptions(options.slice(0, 25)); // Discord select menus cap at 25 options
 
   return interaction.reply({
-    content: "Who do you want to kick from the party?",
+    content: t(interaction.guildId, "party.kick.prompt"),
     components: [new ActionRowBuilder().addComponents(menu)],
     flags: MessageFlags.Ephemeral,
   });
@@ -125,7 +129,7 @@ async function handleKick(interaction, party) {
 async function handleFinish(interaction, party) {
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "Only the party leader or a server admin can finish this party.",
+      content: t(interaction.guildId, "party.finish.denied"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -148,11 +152,11 @@ async function handleFinish(interaction, party) {
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`party:finishholder:${party.messageId}`)
-    .setPlaceholder("Siapa yang bawa loot?")
+    .setPlaceholder(t(interaction.guildId, "party.finish.holderPlaceholder"))
     .addOptions(options.slice(0, 25)); // Discord select menus cap at 25 options
 
   return interaction.reply({
-    content: "Siapa yang bawa loot dari party ini?",
+    content: t(interaction.guildId, "party.finish.holderPrompt"),
     components: [new ActionRowBuilder().addComponents(menu)],
     flags: MessageFlags.Ephemeral,
   });
@@ -162,14 +166,14 @@ async function handleFinish(interaction, party) {
 async function handleDisband(interaction, party) {
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "Only the party leader or a server admin can disband this party.",
+      content: t(interaction.guildId, "party.disband.denied"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   deleteParty(party.messageId);
   return interaction.update({
-    content: "💥 This party has been disbanded.",
+    content: t(interaction.guildId, "party.disband.confirm"),
     embeds: [],
     components: [],
   });
@@ -185,21 +189,21 @@ async function handleFinishConfirm(interaction, parts) {
 
   if (!party) {
     return interaction.update({
-      content: "This party listing is already gone.",
+      content: t(interaction.guildId, "party.finishconfirm.gone"),
       components: [],
     });
   }
 
   if (!isLeaderOrAdmin(interaction, party)) {
     return interaction.reply({
-      content: "Only the party leader or a server admin can decide this.",
+      content: t(interaction.guildId, "party.finishconfirm.denied"),
       flags: MessageFlags.Ephemeral,
     });
   }
 
   if (choice === "no") {
     return interaction.update({
-      content: "👍 Party listing stays open — feel free to keep organizing it.",
+      content: t(interaction.guildId, "party.finishconfirm.keepOpen"),
       components: [],
     });
   }
@@ -214,7 +218,7 @@ async function handleFinishConfirm(interaction, parts) {
   }
 
   return interaction.update({
-    content: "💥 Party listing disbanded.",
+    content: t(interaction.guildId, "party.finishconfirm.disbanded"),
     components: [],
   });
 }

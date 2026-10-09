@@ -12,6 +12,7 @@ const { getParty, joinRole, removeMember } = require("./partyManager");
 const { buildPartyEmbed, buildPartyButtons } = require("./uiBuilders");
 const { hasSubclasses } = require("./roleClasses");
 const { buildSubclassPrompt } = require("./shared/classPicker");
+const { t } = require("../i18n");
 
 const {
   handlePing,
@@ -89,7 +90,7 @@ async function handleButton(interaction) {
 
   if (!party) {
     return interaction.reply({
-      content: "This party no longer exists.",
+      content: t(interaction.guildId, "common.partyGone"),
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -104,12 +105,12 @@ async function handleButton(interaction) {
   // the updated roster) unless something went wrong.
   if (action === "join") {
     if (hasSubclasses(roleKey)) {
-      return interaction.reply(buildSubclassPrompt(party.messageId, roleKey));
+      return interaction.reply(buildSubclassPrompt(party.messageId, roleKey, interaction.guildId));
     }
     const result = joinRole(party.messageId, interaction.user.id, roleKey);
     if (result === "full") {
       return interaction.reply({
-        content: "That role just filled up — try another one!",
+        content: t(interaction.guildId, "party.join.roleFull"),
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -117,15 +118,15 @@ async function handleButton(interaction) {
     const removed = removeMember(party.messageId, interaction.user.id);
     if (!removed) {
       return interaction.reply({
-        content: "You're not currently signed up for this party.",
+        content: t(interaction.guildId, "party.leave.notSignedUp"),
         flags: MessageFlags.Ephemeral,
       });
     }
   }
 
   return interaction.update({
-    embeds: [buildPartyEmbed(party)],
-    components: buildPartyButtons(party),
+    embeds: [buildPartyEmbed(party, interaction.guildId)],
+    components: buildPartyButtons(party, interaction.guildId),
   });
 }
 

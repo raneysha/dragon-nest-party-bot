@@ -1,6 +1,7 @@
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require("discord.js");
 const { getLoot, markPaid, setLootHolder } = require("../lootManager");
 const { buildLootRecapEmbed, buildLootButtons, isLootHolder } = require("./lootUiBuilders");
+const { t } = require("../../i18n");
 
 async function handleSoldSelect(interaction, parts) {
   const [, , recapMessageId] = parts;
@@ -9,27 +10,27 @@ async function handleSoldSelect(interaction, parts) {
   const record = getLoot(recapMessageId);
   if (!record) {
     return interaction.update({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.sold.recordGone"),
       components: [],
     });
   }
 
   if (!isLootHolder(interaction, record)) {
     return interaction.update({
-      content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa menandai item terjual.`,
+      content: t(interaction.guildId, "loot.sold.notHolder", { lootHolder: record.lootHolder }),
       components: [],
     });
   }
 
   const modal = new ModalBuilder()
     .setCustomId(`party:soldprice:${recapMessageId}:${index}`)
-    .setTitle("Harga jual");
+    .setTitle(t(interaction.guildId, "loot.sold.modalTitle"));
 
   const hargaInput = new TextInputBuilder()
     .setCustomId("harga")
-    .setLabel(`Harga untuk "${record.items[index].name}"`.slice(0, 45))
+    .setLabel(t(interaction.guildId, "loot.sold.priceLabel", { item: record.items[index].name }).slice(0, 45))
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder("misal 500k, 1.2m, 750rb")
+    .setPlaceholder(t(interaction.guildId, "loot.sold.pricePlaceholder"))
     .setMaxLength(30)
     .setRequired(true);
 
@@ -44,14 +45,14 @@ async function handleGajiSelect(interaction, parts) {
   const existingRecord = getLoot(recapMessageId);
   if (!existingRecord) {
     return interaction.update({
-      content: "Data party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.gaji.recordGone"),
       components: [],
     });
   }
 
   if (!isLootHolder(interaction, existingRecord)) {
     return interaction.update({
-      content: `Hanya **<@${existingRecord.lootHolder}>** (pembawa loot) yang bisa menandai gaji.`,
+      content: t(interaction.guildId, "loot.gaji.notHolder", { lootHolder: existingRecord.lootHolder }),
       components: [],
     });
   }
@@ -59,20 +60,20 @@ async function handleGajiSelect(interaction, parts) {
   const record = markPaid(recapMessageId, index);
   if (!record) {
     return interaction.update({
-      content: "Data party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.gaji.recordGone"),
       components: [],
     });
   }
 
   try {
     const recapMessage = await interaction.channel.messages.fetch(recapMessageId);
-    await recapMessage.edit({ embeds: [buildLootRecapEmbed(record)] });
+    await recapMessage.edit({ embeds: [buildLootRecapEmbed(record, interaction.guildId)] });
   } catch (err) {
     // Recap message may have been deleted — not fatal, the payment is still recorded.
   }
 
   return interaction.update({
-    content: `✅ Gaji diberikan ke <@${record.roster[index].userId}>`,
+    content: t(interaction.guildId, "loot.gaji.confirm", { userId: record.roster[index].userId }),
     components: [],
   });
 }
@@ -84,14 +85,14 @@ async function handleStampSelect(interaction, parts) {
   const record = getLoot(recapMessageId);
   if (!record) {
     return interaction.update({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.stamp.recordGone"),
       components: [],
     });
   }
 
   if (!isLootHolder(interaction, record)) {
     return interaction.update({
-      content: `Hanya **<@${record.lootHolder}>** (pembawa loot) yang bisa mengisi STAMP.`,
+      content: t(interaction.guildId, "loot.stamp.notHolder", { lootHolder: record.lootHolder }),
       components: [],
     });
   }
@@ -107,13 +108,13 @@ async function handleStampSelect(interaction, parts) {
 
   const modal = new ModalBuilder()
     .setCustomId(`party:stampmodal:${recapMessageId}:${index}`)
-    .setTitle("Isi STAMP");
+    .setTitle(t(interaction.guildId, "loot.stamp.modalTitle"));
 
   const stampInput = new TextInputBuilder()
     .setCustomId("stamp")
-    .setLabel(`Jumlah STAMP untuk ${username}`.slice(0, 45))
+    .setLabel(t(interaction.guildId, "loot.stamp.amountLabel", { username }).slice(0, 45))
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder("misal 5")
+    .setPlaceholder(t(interaction.guildId, "loot.stamp.amountPlaceholder"))
     .setValue(entry.stamp != null ? String(entry.stamp) : "")
     .setMaxLength(10)
     .setRequired(true);
@@ -129,14 +130,14 @@ async function handleChangeHolderSelect(interaction, parts) {
   const existingRecord = getLoot(recapMessageId);
   if (!existingRecord) {
     return interaction.update({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.changeHolder.recordGone"),
       components: [],
     });
   }
 
   if (interaction.user.id !== existingRecord.leaderId) {
     return interaction.update({
-      content: "Hanya party leader yang bisa mengubah pembawa loot.",
+      content: t(interaction.guildId, "loot.changeHolder.leaderOnly"),
       components: [],
     });
   }
@@ -144,7 +145,7 @@ async function handleChangeHolderSelect(interaction, parts) {
   const record = setLootHolder(recapMessageId, newHolderId);
   if (!record) {
     return interaction.update({
-      content: "Data loot untuk party ini sudah tidak tersedia.",
+      content: t(interaction.guildId, "loot.changeHolder.recordGone"),
       components: [],
     });
   }
@@ -152,15 +153,15 @@ async function handleChangeHolderSelect(interaction, parts) {
   try {
     const recapMessage = await interaction.channel.messages.fetch(recapMessageId);
     await recapMessage.edit({
-      embeds: [buildLootRecapEmbed(record)],
-      components: buildLootButtons(recapMessageId, record),
+      embeds: [buildLootRecapEmbed(record, interaction.guildId)],
+      components: buildLootButtons(recapMessageId, record, interaction.guildId),
     });
   } catch (err) {
     // Recap message may have been deleted — not fatal, the change is still recorded.
   }
 
   return interaction.update({
-    content: `✅ Pembawa loot diubah ke <@${newHolderId}>.`,
+    content: t(interaction.guildId, "loot.changeHolder.confirm", { userId: newHolderId }),
     components: [],
   });
 }
