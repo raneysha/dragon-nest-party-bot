@@ -3,12 +3,12 @@ const { ROLE_LABELS, isFull, getAllMemberIds } = require("./partyManager");
 const { t } = require("../i18n");
 
 const ROLE_BUTTON_CODES = {
-  tank: "PL",
-  healer: "HL",
+  tank: "Tank",
+  healer: "Healer",
   swordmaster: "SM",
   mercenary: "MC",
   sorceress: "SC",
-  acrobat: "AC",
+  acrobat: "SB",
   flexible: "FLX",
 };
 
@@ -117,8 +117,11 @@ function buildPartyButtons(party, guildId) {
     rows.push(row);
   }
 
-  // Split across two rows of 3 (instead of one packed row) since adding
-  // Assign brought the action button count to 6 — one row can only hold 5.
+  // Row 1: Ping / Leave / Assign / Edit (4 buttons — still under Discord's
+  // 5-per-row cap). Row 2: Kick / Finish / Disband (3 buttons). Keeping
+  // this at 2 extra rows total matters: with up to 7 distinct roles
+  // wrapping into up to 3 role-button rows, 2 more action rows lands
+  // exactly at Discord's hard 5-row-per-message limit.
   rows.push(
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -135,6 +138,11 @@ function buildPartyButtons(party, guildId) {
         .setCustomId("party:assign")
         .setLabel(t(guildId, "party.buttons.assign"))
         .setEmoji("👑")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("party:edit")
+        .setLabel(t(guildId, "party.buttons.edit"))
+        .setEmoji("✏️")
         .setStyle(ButtonStyle.Secondary)
     )
   );

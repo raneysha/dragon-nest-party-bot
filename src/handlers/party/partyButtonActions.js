@@ -179,6 +179,47 @@ async function handleDisband(interaction, party) {
   });
 }
 
+// Opens a modal pre-filled with the party's current title (activity) and
+// time, letting the leader/admin update either. See
+// partyModalActions.js's handleEditModalSubmit for where the submission
+// is applied.
+async function handleEdit(interaction, party) {
+  if (!isLeaderOrAdmin(interaction, party)) {
+    return interaction.reply({
+      content: t(interaction.guildId, "party.edit.denied"),
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`party:editmodal:${party.messageId}`)
+    .setTitle(t(interaction.guildId, "party.edit.modalTitle"));
+
+  const activityInput = new TextInputBuilder()
+    .setCustomId("activity")
+    .setLabel(t(interaction.guildId, "party.edit.activityLabel"))
+    .setStyle(TextInputStyle.Short)
+    .setValue(party.activity)
+    .setMaxLength(100)
+    .setRequired(true);
+
+  const timeInput = new TextInputBuilder()
+    .setCustomId("time")
+    .setLabel(t(interaction.guildId, "party.edit.timeLabel"))
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder(t(interaction.guildId, "party.edit.timePlaceholder"))
+    .setValue(party.time || "")
+    .setMaxLength(100)
+    .setRequired(false);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(activityInput),
+    new ActionRowBuilder().addComponents(timeInput)
+  );
+
+  return interaction.showModal(modal);
+}
+
 // Confirmation step shown after a loot thread is created: keep the party
 // listing open, or disband it now that it's wrapped up.
 // customId format: party:finishconfirm:<yes|no>:<messageId>
@@ -223,4 +264,12 @@ async function handleFinishConfirm(interaction, parts) {
   });
 }
 
-module.exports = { handlePing, handleAssign, handleKick, handleFinish, handleDisband, handleFinishConfirm };
+module.exports = {
+  handlePing,
+  handleAssign,
+  handleKick,
+  handleFinish,
+  handleDisband,
+  handleEdit,
+  handleFinishConfirm,
+};

@@ -1,11 +1,22 @@
-// Simple in-memory store of active parties, keyed by the Discord message ID
-// that hosts the party's embed. Swap this for a database (SQLite, etc.) if
-// you need parties to survive a bot restart.
+// In-memory store of active party listings, keyed by the Discord message ID
+// that hosts the party's embed. Not persisted to disk — parties are meant
+// to be short-lived (form up, run it, finish it), so a restart clearing
+// them is an acceptable trade-off for staying simple.
 
 const parties = new Map();
 
-// The built-in default party composition, used when a server hasn't set
-// its own default via /config set-default-party. Total: 8 members.
+const ROLE_LABELS = {
+  tank: "🛡️ Paladin",
+  healer: "💉 Healer",
+  swordmaster: "⚔️ Swordmaster",
+  mercenary: "🔨 Mercenary",
+  sorceress: "🔥 Sorceress",
+  acrobat: "🏹 Acrobat",
+  flexible: "🎯 Flexible",
+};
+
+// Used when a server hasn't configured a custom default via
+// /config set-default-party.
 const FACTORY_DEFAULT_ROLE_CAPS = {
   tank: 1,
   healer: 1,
@@ -16,22 +27,13 @@ const FACTORY_DEFAULT_ROLE_CAPS = {
   flexible: 2,
 };
 
-// Full labels (emoji + name) shown in the embed roster fields.
-const ROLE_LABELS = {
-  tank: "🛡️ Paladin",
-  healer: "❤️ Healers",
-  swordmaster: "⚔️ Swordmasters",
-  mercenary: "🗡️ Mercenaries",
-  sorceress: "🔮 Sorceresses",
-  acrobat: "🤸 Acrobats",
-  flexible: "🔀 Flexible (DPS)",
-};
-
+// roleCaps: { tank: 1, healer: 1, ... } — any role with cap 0 is simply
+// omitted from party.roles, so it never shows up as a joinable slot.
 function createParty({ messageId, channelId, leaderId, activity, time, note, nestType, roleCaps }) {
   const roles = {};
-  for (const [key, cap] of Object.entries(roleCaps)) {
+  for (const [roleKey, cap] of Object.entries(roleCaps)) {
     if (cap > 0) {
-      roles[key] = { cap, members: [] };
+      roles[roleKey] = { cap, members: [] };
     }
   }
 
@@ -46,7 +48,6 @@ function createParty({ messageId, channelId, leaderId, activity, time, note, nes
     roles,
     createdAt: Date.now(),
   };
-
   parties.set(messageId, party);
   return party;
 }
@@ -63,9 +64,9 @@ function deleteParty(messageId) {
   return parties.delete(messageId);
 }
 
-// Moves a party's data from its old message ID to a new one — used when
-// reposting ("recalling") a party under a fresh message so old join/leave
-// buttons don't linger on a buried message.
+// Moves a party's data to a new message ID — used by /party recall, which
+// deletes the old (buried) message and posts a fresh one so it's easy to
+// find again, without losing the roster.
 function rekeyParty(oldMessageId, newMessageId) {
   const party = parties.get(oldMessageId);
   if (!party) return null;
@@ -75,56 +76,65 @@ function rekeyParty(oldMessageId, newMessageId) {
   return party;
 }
 
-// Adds a user to a role, removing them from any other role in the same
-// party first (a member can only hold one role at a time). Each member is
-// stored as { userId, subclass } — subclass is null for roles that don't
-// have subclass choices defined.
-// Returns a status string: "joined" | "full" | "no-such-role"
+// Updates a party's editable metadata (currently activity/title and time).
+// Pass only the fields you want changed — omitted (undefined) fields are
+// left as-is. An empty string for `time` clears it back to "not set"
+// (shown as no time line in the embed), matching how /party create treats
+// a blank time option. `activity` is never cleared this way since a party
+// always needs a name; validate that before calling if needed.
+// Returns the updated party, or null if it no longer exists.
+function updateParty(messageId, { activity, time } = {}) {
+  const party = parties.get(messageId);
+  if (!party) return null;
+  if (activity !== undefined) party.activity = activity;
+  if (time !== undefined) party.time = time || null;
+  return party;
+}
+
+// Returns "full" if the role is already at capacity, "joined" if the
+// join succeeded. If the user is already in a different role, they're
+// moved (removed from the old one first) rather than duplicated.
 function joinRole(messageId, userId, roleKey, subclass = null) {
   const party = parties.get(messageId);
   if (!party) return "no-such-party";
   const role = party.roles[roleKey];
   if (!role) return "no-such-role";
-
-  removeMember(messageId, userId); // clear any existing signup first
-
   if (role.members.length >= role.cap) return "full";
+
+  removeMember(messageId, userId);
   role.members.push({ userId, subclass });
   return "joined";
 }
 
+// Removes a user from whichever role they're currently in (if any).
+// Returns true if they were found and removed.
 function removeMember(messageId, userId) {
   const party = parties.get(messageId);
   if (!party) return false;
-  let removed = false;
   for (const role of Object.values(party.roles)) {
     const idx = role.members.findIndex((m) => m.userId === userId);
     if (idx !== -1) {
       role.members.splice(idx, 1);
-      removed = true;
+      return true;
     }
   }
-  return removed;
+  return false;
 }
 
 function isFull(party) {
-  return Object.values(party.roles).every((r) => r.members.length >= r.cap);
+  return Object.values(party.roles).every((role) => role.members.length >= role.cap);
 }
 
-// Does this user currently hold any role in the party?
 function isMember(party, userId) {
-  return Object.values(party.roles).some((role) =>
-    role.members.some((m) => m.userId === userId)
-  );
+  return Object.values(party.roles).some((role) => role.members.some((m) => m.userId === userId));
 }
 
-// Every current member's user ID across all roles, no duplicates.
 function getAllMemberIds(party) {
-  const ids = new Set();
+  const ids = [];
   for (const role of Object.values(party.roles)) {
-    for (const member of role.members) ids.add(member.userId);
+    for (const member of role.members) ids.push(member.userId);
   }
-  return Array.from(ids);
+  return ids;
 }
 
 module.exports = {
@@ -135,6 +145,7 @@ module.exports = {
   getAllParties,
   deleteParty,
   rekeyParty,
+  updateParty,
   joinRole,
   removeMember,
   isFull,

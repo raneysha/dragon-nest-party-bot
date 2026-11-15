@@ -1,18 +1,10 @@
 // Every user-facing runtime string in the bot, keyed by feature area, in
 // both supported languages. Game-specific proper nouns (role names like
 // "Paladin", class names like "Guardian", and short roster codes like
-// PL/PR/SM/DPS) are intentionally left untranslated in both locales —
-// they're Dragon Nest terminology, not sentences, and stay recognizable
-// either way.
-//
-// Slash command names/descriptions (the metadata shown when typing "/")
-// are NOT covered here — Discord requires those to be registered in a
-// single base language, so they stay in English regardless of a server's
-// configured bot language. Only what the bot actually *says* in replies,
-// embeds, and buttons changes with this setting.
+// PL/PR/SM/DPS) are intentionally left untranslated in both locales.
 //
 // Params use {curly} placeholders, filled in by the t() helper in
-// i18n/index.js — e.g. "Removed **{ign}**." + { ign: "Aveline" }.
+// i18n/index.js.
 
 const en = {
   // ---- shared / generic ----
@@ -79,6 +71,7 @@ const en = {
   "party.buttons.kick": "Kick",
   "party.buttons.finish": "Finish",
   "party.buttons.disband": "Disband",
+  "party.buttons.edit": "Edit",
 
   // ---- join / leave ----
   "party.join.roleFull": "That role just filled up — try another one!",
@@ -144,6 +137,14 @@ const en = {
   // ---- disband ----
   "party.disband.denied": "Only the party leader or a server admin can disband this party.",
   "party.disband.confirm": "💥 This party has been disbanded.",
+
+  // ---- edit ----
+  "party.edit.denied": "Only the party leader or a server admin can edit this party.",
+  "party.edit.modalTitle": "Edit party",
+  "party.edit.activityLabel": "Activity / Party name",
+  "party.edit.timeLabel": "Time",
+  "party.edit.timePlaceholder": "e.g. 8 PM server time",
+  "party.edit.confirm": "✅ Party updated.",
 
   // ---- loot embed ----
   "loot.embed.title": "📦 Loot recap — {activity}",
@@ -281,6 +282,7 @@ const id = {
   "party.buttons.kick": "Kick",
   "party.buttons.finish": "Selesai",
   "party.buttons.disband": "Bubarkan",
+  "party.buttons.edit": "Edit",
 
   // ---- join / leave ----
   "party.join.roleFull": "Role itu baru saja penuh — coba yang lain!",
@@ -346,6 +348,14 @@ const id = {
   // ---- disband ----
   "party.disband.denied": "Hanya party leader atau admin server yang bisa membubarkan party ini.",
   "party.disband.confirm": "💥 Party ini telah dibubarkan.",
+
+  // ---- edit ----
+  "party.edit.denied": "Hanya party leader atau admin server yang bisa mengedit party ini.",
+  "party.edit.modalTitle": "Edit party",
+  "party.edit.activityLabel": "Activity / Nama party",
+  "party.edit.timeLabel": "Waktu",
+  "party.edit.timePlaceholder": "misal 8 malam waktu server",
+  "party.edit.confirm": "✅ Party diperbarui.",
 
   // ---- loot embed ----
   "loot.embed.title": "📦 Rekap loot — {activity}",

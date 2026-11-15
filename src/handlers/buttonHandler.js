@@ -1,12 +1,6 @@
 // Routes every `party:`-prefixed interaction (buttons, select menus,
 // modals) to its handler. This file intentionally stays thin — the actual
-// logic lives in the domain-specific modules below:
-//
-//   shared/   — permission checks and helpers used by both party & loot code
-//   party/    — everything about the party listing itself (join, leave,
-//               kick, assign, ping, finish, disband)
-//   loot/     — everything about the post-finish loot recap thread
-//               (marking items sold, paying gaji, stamps, changing holder)
+// logic lives in the domain-specific modules below.
 const { MessageFlags } = require("discord.js");
 const { getParty, joinRole, removeMember } = require("./partyManager");
 const { buildPartyEmbed, buildPartyButtons } = require("./uiBuilders");
@@ -20,6 +14,7 @@ const {
   handleKick,
   handleFinish,
   handleDisband,
+  handleEdit,
   handleFinishConfirm,
 } = require("./party/partyButtonActions");
 const {
@@ -30,7 +25,7 @@ const {
   handleFinishHolder,
   handlePickClass,
 } = require("./party/partySelectActions");
-const { handlePingModalSubmit } = require("./party/partyModalActions");
+const { handlePingModalSubmit, handleEditModalSubmit } = require("./party/partyModalActions");
 const { handleFinishModalSubmit, buildFinishThreadName } = require("./party/partyFinishFlow");
 
 const {
@@ -68,6 +63,7 @@ const PARTY_BUTTON_ACTIONS = {
   kick: handleKick,
   finish: handleFinish,
   disband: handleDisband,
+  edit: handleEdit,
 };
 
 async function handleButton(interaction) {
@@ -78,9 +74,6 @@ async function handleButton(interaction) {
     return LOOT_BUTTON_ACTIONS[action](interaction, parts);
   }
 
-  // finishconfirm resolves its own party from parts[3] rather than
-  // interaction.message.id, since it's shown on a follow-up reply, not
-  // the party message itself.
   if (action === "finishconfirm") {
     return handleFinishConfirm(interaction, parts);
   }
@@ -101,8 +94,7 @@ async function handleButton(interaction) {
 
   // Join and Leave are the only two actions that fall through to a shared
   // "refresh the party embed" step below instead of fully owning their
-  // own response, since both silently succeed (no state to report beyond
-  // the updated roster) unless something went wrong.
+  // own response.
   if (action === "join") {
     if (hasSubclasses(roleKey)) {
       return interaction.reply(buildSubclassPrompt(party.messageId, roleKey, interaction.guildId));
@@ -161,6 +153,7 @@ async function handleSelectMenu(interaction) {
 const PARTY_MODAL_ACTIONS = {
   finishmodal: handleFinishModalSubmit,
   pingmodal: handlePingModalSubmit,
+  editmodal: handleEditModalSubmit,
 };
 
 const LOOT_MODAL_ACTIONS = {
