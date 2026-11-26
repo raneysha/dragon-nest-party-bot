@@ -74,4 +74,18 @@ function getCharacters(userId) {
   return characters.get(userId) || [];
 }
 
-module.exports = { addCharacter, removeCharacter, getCharacters };
+// Finds every registered character of a given class (case-insensitive),
+// grouped by owner: [{ userId, igns: ["Aveline", ...] }, ...]. A player
+// with several characters of the same class appears once with all their
+// IGNs. Sorted by most characters first, then by user ID for a stable order.
+function findByClass(className) {
+  const wanted = className.toLowerCase();
+  const results = [];
+  for (const [userId, list] of characters) {
+    const igns = list.filter((c) => c.className.toLowerCase() === wanted).map((c) => c.ign);
+    if (igns.length > 0) results.push({ userId, igns });
+  }
+  return results.sort((a, b) => b.igns.length - a.igns.length || a.userId.localeCompare(b.userId));
+}
+
+module.exports = { addCharacter, removeCharacter, getCharacters, findByClass };

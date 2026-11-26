@@ -34,6 +34,10 @@ const en = {
   "character.list.emptyOther": "{username} hasn't registered any characters yet.",
   "character.list.title": "🗡️ {username}'s characters",
   "character.list.footer": "{count} character{plural} registered",
+  "character.search.empty": "Nobody in this server has registered a **{className}** yet.",
+  "character.search.title": "🔎 {className} players",
+  "character.search.footer": "Players: {players} · Characters: {characters}",
+  "character.search.more": "…and {count} more",
   "character.remove.notFound": "You don't have a character named **{ign}** registered.",
   "character.remove.confirm": "🗑️ Removed **{ign}**.",
 
@@ -244,7 +248,11 @@ const id = {
   "character.list.emptySelf": "Kamu belum mendaftarkan karakter apapun.",
   "character.list.emptyOther": "{username} belum mendaftarkan karakter apapun.",
   "character.list.title": "🗡️ Karakter {username}",
-  "character.list.footer": "{count} karakter{plural} terdaftar",
+  "character.list.footer": "{count} karakter terdaftar",
+  "character.search.empty": "Belum ada yang mendaftarkan **{className}** di server ini.",
+  "character.search.title": "🔎 Pemain {className}",
+  "character.search.footer": "Pemain: {players} · Karakter: {characters}",
+  "character.search.more": "…dan {count} lainnya",
   "character.remove.notFound": "Kamu tidak punya karakter bernama **{ign}** yang terdaftar.",
   "character.remove.confirm": "🗑️ Dihapus **{ign}**.",
 

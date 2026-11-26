@@ -53,6 +53,8 @@ Inside the loot thread, the recap embed has its own buttons:
   picked from a dropdown of every class in the game)
 - `/character list` — view your own characters, or someone else's by
   tagging them
+- `/character search` — pick a class and see which players in this server
+  have a character of that class (with their in-game names)
 - `/character remove` — remove a character you registered
 
 ### Per-server configuration
